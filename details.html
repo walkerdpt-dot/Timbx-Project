@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Details - TIMBX</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body class="bg-gray-100">
+
+  <header class="bg-green-700 text-white p-4 shadow-lg">
+    <div class="container mx-auto flex justify-between items-center">
+      <h1 class="text-3xl font-bold">TIMBX Details</h1>
+      <a href="index.html#marketplace" class="bg-yellow-500 hover:bg-yellow-400 text-gray-900 px-4 py-2 rounded-md font-bold transition duration-200">
+        &larr; Back to Marketplace
+      </a>
+    </div>
+  </header>
+
+  <main class="container mx-auto p-6">
+    <div id="details-content" class="bg-white p-8 rounded-lg shadow-md">
+      <!-- Details will be loaded here by JavaScript -->
+      <p class="loading-indicator">Loading details...</p>
+    </div>
+  </main>
+
+  <script type="module" src="js/details.js"></script>
+</body>
+</html>
