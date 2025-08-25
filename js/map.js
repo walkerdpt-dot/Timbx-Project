@@ -1,143 +1,254 @@
 // js/map.js
-import { getMarketplaceDataFromSession } from './firestore.js';
-
 let globalMap, propertyMap, signupMap, editProfileMap, drawnItems, lastDrawnLayer, locationMarker, serviceAreaCircle;
+let profileMap; // Variable to track the profile map instance
 
-// --- Map Initialization Functions ---
+function destroyMap(mapInstance) {
+    if (mapInstance) {
+        mapInstance.remove();
+    }
+    return null;
+}
+
+function addLayerAndSearchControls(map) {
+    const streets = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap' });
+    const satellite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { attribution: '&copy; Esri' });
+    const hybridLabels = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}');
+    const hybridGroup = L.layerGroup([satellite, hybridLabels]);
+
+    hybridGroup.addTo(map);
+
+    const baseMaps = {
+        "Hybrid": hybridGroup,
+        "Streets": streets,
+        "Satellite": satellite
+    };
+    L.control.layers(baseMaps, null, { position: 'topright' }).addTo(map);
+
+    // --- DEFINITIVE FIX START ---
+    // This is the correct and final way to create and add a custom Leaflet control.
+    L.Control.Search = L.Control.extend({
+        options: {
+            position: 'topleft' // The position must be defined in the options object.
+        },
+        onAdd: function(map) {
+            const container = L.DomUtil.create('div', 'leaflet-bar leaflet-control leaflet-control-custom leaflet-search-icon');
+            container.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-6 h-6"><path fill-rule="evenodd" d="M10.5 3.75a6.75 6.75 0 100 13.5 6.75 6.75 0 000-13.5zM2.25 10.5a8.25 8.25 0 1114.59 5.28l4.69 4.69a.75.75 0 11-1.06 1.06l-4.69-4.69A8.25 8.25 0 012.25 10.5z" clip-rule="evenodd" /></svg>`;
+            container.onclick = function(e) {
+                e.stopPropagation();
+                document.getElementById('map-search-modal').classList.remove('hidden');
+            };
+            return container;
+        }
+    });
+    // This correctly creates an instance of our new control and adds it to the map.
+    map.addControl(new L.Control.Search());
+    // --- DEFINITIVE FIX END ---
+    
+    const geocoderContainer = document.getElementById('geocoder-container');
+    if(geocoderContainer){
+        const geocoder = L.Control.geocoder({
+            defaultMarkGeocode: false,
+            collapsed: false,
+            placeholder: 'Search for a location...',
+        }).on('markgeocode', function(e) {
+            map.fitBounds(e.geocode.bbox);
+            document.getElementById('map-search-modal').classList.add('hidden');
+        });
+        geocoder.addTo(geocoderContainer);
+    }
+}
+
 
 export function initGlobalMap(onMoveEndCallback) {
-    if (globalMap) {
-        globalMap.invalidateSize();
-        return;
-    }
-    globalMap = L.map('global-map').setView([34.7465, -92.2896], 7); // Centered on Arkansas
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '&copy; OpenStreetMap contributors'
-    }).addTo(globalMap);
-
+    globalMap = destroyMap(globalMap);
+    globalMap = L.map('global-map').setView([34.7465, -92.2896], 7);
+    addLayerAndSearchControls(globalMap);
     if (onMoveEndCallback) {
         globalMap.on('moveend', onMoveEndCallback);
     }
-
-    // Add geocoder search control
-    L.Control.geocoder({
-        defaultMarkGeocode: false
-    })
-    .on('markgeocode', function(e) {
-        var bbox = e.geocode.bbox;
-        var poly = L.polygon([
-            bbox.getSouthEast(),
-            bbox.getNorthEast(),
-            bbox.getNorthWest(),
-            bbox.getSouthWest()
-        ]);
-        globalMap.fitBounds(poly.getBounds());
-    })
-    .addTo(globalMap);
 }
 
-// ... (initPropertyFormMap, destroyPropertyFormMap, getLastDrawnGeoJSON remain the same)
-export function initPropertyFormMap() {
-    if (propertyMap) {
-        propertyMap.invalidateSize();
-        return;
-    }
+export function initPropertyFormMap(existingGeoJSON) {
+    propertyMap = destroyMap(propertyMap);
+    
     propertyMap = L.map('property-map').setView([34.7465, -92.2896], 10);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(propertyMap);
+    addLayerAndSearchControls(propertyMap);
 
     drawnItems = new L.FeatureGroup();
     propertyMap.addLayer(drawnItems);
 
+    if (existingGeoJSON && existingGeoJSON.geometry && existingGeoJSON.geometry.coordinates) {
+        const displayGeoJSON = JSON.parse(JSON.stringify(existingGeoJSON));
+        displayGeoJSON.geometry.coordinates = [displayGeoJSON.geometry.coordinates];
+        
+        const existingLayer = L.geoJSON(displayGeoJSON);
+        drawnItems.addLayer(existingLayer);
+        lastDrawnLayer = existingLayer.getLayers()[0];
+        propertyMap.fitBounds(existingLayer.getBounds());
+        calculateAndDisplayAcreage(lastDrawnLayer);
+    }
+
     const drawControl = new L.Control.Draw({
-        edit: { featureGroup: drawnItems },
+        edit: { featureGroup: drawnItems, remove: true },
         draw: {
-            polygon: true,
-            polyline: false,
-            rectangle: false,
-            circle: false,
-            marker: false,
-            circlemarker: false
+            polygon: { allowIntersection: false, showArea: true },
+            polyline: false, rectangle: false, circle: false,
+            marker: false, circlemarker: false
         }
     });
     propertyMap.addControl(drawControl);
 
     propertyMap.on(L.Draw.Event.CREATED, function (event) {
-        if (lastDrawnLayer) {
-            drawnItems.removeLayer(lastDrawnLayer);
-        }
+        if (lastDrawnLayer) drawnItems.removeLayer(lastDrawnLayer);
         const layer = event.layer;
         lastDrawnLayer = layer;
         drawnItems.addLayer(layer);
+        calculateAndDisplayAcreage(layer);
     });
+
+    propertyMap.on(L.Draw.Event.EDITED, function (event) {
+        const layers = event.layers;
+        layers.eachLayer(function (layer) {
+            lastDrawnLayer = layer;
+            calculateAndDisplayAcreage(layer);
+        });
+    });
+    
+    propertyMap.on(L.Draw.Event.DELETED, function () {
+        lastDrawnLayer = null;
+        calculateAndDisplayAcreage(null);
+    });
+
+    setTimeout(() => {
+        if (propertyMap) propertyMap.invalidateSize()
+    }, 400);
 }
 
-export function destroyPropertyFormMap() {
-    if (propertyMap) {
-        propertyMap.remove();
-        propertyMap = null;
-        lastDrawnLayer = null;
+function calculateAndDisplayAcreage(layer) {
+    const acreageSpan = document.getElementById('calculated-acreage');
+    if (layer && L.GeometryUtil) {
+        const latlngs = layer.getLatLngs()[0];
+        if (latlngs && latlngs.length > 2) {
+            const areaInMeters = L.GeometryUtil.geodesicArea(latlngs);
+            const areaInAcres = areaInMeters / 4046.86;
+            acreageSpan.textContent = areaInAcres.toFixed(2);
+        } else {
+             acreageSpan.textContent = '0.00';
+        }
+    } else {
+        acreageSpan.textContent = '0.00';
     }
 }
 
 export function getLastDrawnGeoJSON() {
-    if (lastDrawnLayer) {
-        return lastDrawnLayer.toGeoJSON();
-    }
-    return null;
+    if (!lastDrawnLayer) return null;
+    const geojson = lastDrawnLayer.toGeoJSON();
+    geojson.geometry.coordinates = geojson.geometry.coordinates[0];
+    return geojson;
 }
 
-
-// --- NEW FUNCTION ---
-// Initializes the static map on the user's profile page.
 export function initProfileDisplayMap(user) {
     const mapContainer = document.getElementById('profile-map-display');
     if (!mapContainer) return;
 
-    // Clear previous map instance if any
-    if (mapContainer._leaflet_id) {
-        mapContainer._leaflet_id = null;
-        mapContainer.innerHTML = "";
-    }
+    profileMap = destroyMap(profileMap);
 
     if (!user || !user.location) {
         mapContainer.innerHTML = `<div class="p-4 text-center text-gray-500">No location set.</div>`;
         return;
     }
-
+    
+    mapContainer.innerHTML = "";
     const lat = user.location.lat;
     const lng = user.location.lng;
 
-    const profileMap = L.map(mapContainer, {
+    profileMap = L.map(mapContainer, {
         center: [lat, lng],
         zoom: 10,
-        dragging: false,
-        touchZoom: false,
-        scrollWheelZoom: false,
-        doubleClickZoom: false,
-        boxZoom: false,
-        keyboard: false,
-        zoomControl: false // Hide zoom buttons
+        dragging: false, touchZoom: false, scrollWheelZoom: false,
+        doubleClickZoom: false, boxZoom: false, keyboard: false,
+        zoomControl: true
     });
-
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(profileMap);
+    
+    addLayerAndSearchControls(profileMap);
 
     L.marker([lat, lng]).addTo(profileMap);
 
     if (user.serviceRadius) {
-        L.circle([lat, lng], {
-            radius: user.serviceRadius * 1609.34, // Convert miles to meters
+        const circle = L.circle([lat, lng], {
+            radius: user.serviceRadius * 1609.34,
             color: 'blue',
             fillColor: '#3498db',
             fillOpacity: 0.2
         }).addTo(profileMap);
-        profileMap.fitBounds(profileMap.getBounds()); // Adjust zoom to fit the circle
+        profileMap.fitBounds(circle.getBounds());
     }
 }
 
+export function initSignupMap(role) {
+    const mapId = `${role}-signup-map`;
+    signupMap = destroyMap(signupMap);
+    
+    signupMap = L.map(mapId).setView([34.7465, -92.2896], 5);
+    addLayerAndSearchControls(signupMap);
 
-// ... (The rest of map.js remains the same)
+    locationMarker = null;
 
-// --- Map Update & Display Functions ---
+    signupMap.on('click', function(e) {
+        if (locationMarker) {
+            locationMarker.setLatLng(e.latlng);
+        } else {
+            locationMarker = L.marker(e.latlng).addTo(signupMap);
+        }
+    });
+    setTimeout(() => {
+        if (signupMap) signupMap.invalidateSize();
+    }, 400);
+}
+
+export function initEditProfileMap(user) {
+    editProfileMap = destroyMap(editProfileMap);
+
+    const lat = user.location?.lat || 34.7465;
+    const lng = user.location?.lng || -92.2896;
+    const radius = user.serviceRadius || 50;
+
+    editProfileMap = L.map('edit-profile-map').setView([lat, lng], 7);
+    addLayerAndSearchControls(editProfileMap);
+
+    locationMarker = L.marker([lat, lng], { draggable: true }).addTo(editProfileMap);
+    serviceAreaCircle = L.circle([lat, lng], {
+        radius: radius * 1609.34,
+        color: 'blue',
+        fillColor: '#3498db',
+        fillOpacity: 0.2
+    }).addTo(editProfileMap);
+
+    locationMarker.on('dragend', function(event){
+        const marker = event.target;
+        const position = marker.getLatLng();
+        serviceAreaCircle.setLatLng(position);
+    });
+
+    setTimeout(() => {
+        if (editProfileMap) editProfileMap.invalidateSize();
+    }, 400);
+}
+
+export function updateServiceAreaCircle(radiusInMiles) {
+    if (serviceAreaCircle) {
+        const radiusInMeters = radiusInMiles * 1609.34;
+        serviceAreaCircle.setRadius(radiusInMeters);
+    }
+}
+
+export function getUpdatedLocation() {
+    if (locationMarker) {
+        const latLng = locationMarker.getLatLng();
+        return { lat: latLng.lat, lng: latLng.lng };
+    }
+    return null;
+}
 
 let propertyMarkers = [];
 let profileMarkers = [];
@@ -164,16 +275,19 @@ export function updateMapAndList(allProperties, allProfessionalProfiles) {
 
     if (filters.properties) {
         allProperties.forEach(prop => {
-            if (prop.geoJSON && prop.geoJSON.geometry) {
-                const geoJsonLayer = L.geoJSON(prop.geoJSON);
+            if (prop.geoJSON && prop.geoJSON.geometry && prop.geoJSON.geometry.coordinates) {
+                const displayGeoJSON = JSON.parse(JSON.stringify(prop.geoJSON));
+                displayGeoJSON.geometry.coordinates = [displayGeoJSON.geometry.coordinates];
+                
+                const geoJsonLayer = L.geoJSON(displayGeoJSON);
                 const layerBounds = geoJsonLayer.getBounds();
+
                 if (bounds.intersects(layerBounds)) {
                     itemsInView++;
-                    const marker = L.geoJSON(prop.geoJSON, {
+                    const marker = L.geoJSON(displayGeoJSON, {
                         style: { color: 'blue', weight: 2 }
                     }).bindPopup(`<b>${prop.name}</b><br>${prop.serviceType}`).addTo(globalMap);
                     propertyMarkers.push(marker);
-
                     const li = document.createElement('li');
                     li.className = 'p-2 border-b cursor-pointer hover:bg-gray-100';
                     li.innerHTML = `<span class="font-bold text-blue-700">${prop.name}</span><br><span class="text-sm">${prop.serviceType}</span>`;
@@ -188,24 +302,20 @@ export function updateMapAndList(allProperties, allProfessionalProfiles) {
     }
 
     allProfessionalProfiles.forEach(prof => {
-        const role = prof.role;
-        if (filters[role + 's'] && prof.location) {
+        const roleKey = prof.role + 's';
+        if (filters[roleKey] && prof.location) {
             const profLatLng = L.latLng(prof.location.lat, prof.location.lng);
             if (bounds.contains(profLatLng)) {
                 itemsInView++;
-                const color = role === 'forester' ? 'green' : role === 'buyer' ? 'red' : 'yellow';
+                const color = prof.role === 'forester' ? 'green' : prof.role === 'buyer' ? 'red' : 'yellow';
                 const marker = L.circleMarker(profLatLng, {
-                    radius: 8,
-                    color: 'white',
-                    weight: 2,
-                    fillColor: color,
-                    fillOpacity: 1
-                }).bindPopup(`<b>${prof.username}</b><br>Role: ${role.charAt(0).toUpperCase() + role.slice(1)}`).addTo(globalMap);
+                    radius: 8, color: 'white', weight: 2,
+                    fillColor: color, fillOpacity: 1
+                }).bindPopup(`<b>${prof.username}</b><br>Role: ${prof.role.charAt(0).toUpperCase() + prof.role.slice(1)}`).addTo(globalMap);
                 profileMarkers.push(marker);
-
                 const li = document.createElement('li');
                 li.className = 'p-2 border-b cursor-pointer hover:bg-gray-100';
-                li.innerHTML = `<span class="font-bold" style="color: ${color};">${prof.username}</span><br><span class="text-sm">${role.charAt(0).toUpperCase() + role.slice(1)}</span>`;
+                li.innerHTML = `<span class="font-bold" style="color: ${color};">${prof.username}</span><br><span class="text-sm">${prof.role.charAt(0).toUpperCase() + prof.role.slice(1)}</span>`;
                 li.onclick = () => {
                     globalMap.setView(marker.getLatLng(), 12);
                     marker.openPopup();
@@ -218,78 +328,4 @@ export function updateMapAndList(allProperties, allProfessionalProfiles) {
     if (itemsInView === 0) {
         listContainer.innerHTML = '<li class="p-2 text-center text-gray-500">No items in the current map view.</li>';
     }
-}
-
-export function showPropertyMap(property) {
-    if (!property.geoJSON) return;
-
-    // A simple implementation could be to open a new window or a modal with a map.
-    // For now, let's just log it to console.
-    console.log("Displaying map for property:", property.name, property.geoJSON);
-    alert(`Map data for ${property.name} would be displayed here.`);
-}
-
-export function initSignupMap(role) {
-    const mapId = `${role}-signup-map`;
-    if (signupMap) signupMap.remove();
-    
-    signupMap = L.map(mapId).setView([34.7465, -92.2896], 5);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(signupMap);
-
-    if (locationMarker) locationMarker.remove();
-
-    signupMap.on('click', function(e) {
-        if (locationMarker) {
-            locationMarker.setLatLng(e.latlng);
-        } else {
-            locationMarker = L.marker(e.latlng).addTo(signupMap);
-        }
-    });
-}
-
-export function initEditProfileMap(user) {
-    if (editProfileMap) {
-        editProfileMap.remove();
-        editProfileMap = null;
-        locationMarker = null;
-        serviceAreaCircle = null;
-    }
-
-    const lat = user.location?.lat || 34.7465;
-    const lng = user.location?.lng || -92.2896;
-    const radius = user.serviceRadius || 50;
-
-    editProfileMap = L.map('edit-profile-map').setView([lat, lng], 7);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(editProfileMap);
-
-    locationMarker = L.marker([lat, lng], { draggable: true }).addTo(editProfileMap);
-    serviceAreaCircle = L.circle([lat, lng], {
-        radius: radius * 1609.34, // Convert miles to meters
-        color: 'blue',
-        fillColor: '#3498db',
-        fillOpacity: 0.2
-    }).addTo(editProfileMap);
-
-    locationMarker.on('dragend', function(event){
-        const marker = event.target;
-        const position = marker.getLatLng();
-        serviceAreaCircle.setLatLng(position);
-    });
-
-    setTimeout(() => editProfileMap.invalidateSize(), 100);
-}
-
-export function updateServiceAreaCircle(radiusInMiles) {
-    if (serviceAreaCircle) {
-        const radiusInMeters = radiusInMiles * 1609.34;
-        serviceAreaCircle.setRadius(radiusInMeters);
-    }
-}
-
-export function getUpdatedLocation() {
-    if (locationMarker) {
-        const latLng = locationMarker.getLatLng();
-        return { lat: latLng.lat, lng: latLng.lng };
-    }
-    return null;
 }
