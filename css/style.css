@@ -1,134 +1,115 @@
-/* Custom styles to override or enhance Tailwind */
+/* General Body Styles */
 body {
-  font-family: "Inter", sans-serif;
+    background-color: #f0fdf4; /* A very light green for the background */
+    color: #1f2937; /* Dark gray for text */
 }
 
-/* Apply height and width to the correct map container IDs */
-#property-map, #global-map, #forester-signup-map, #buyer-signup-map, 
-#contractor-signup-map, #view-property-map, #project-details-map, #edit-profile-map {
-  height: 400px;
-  width: 100%;
-  border-radius: 0.5rem;
+/* Map container heights */
+#global-map, #property-map, #forester-signup-map, #buyer-signup-map, #contractor-signup-map, #edit-profile-map, #profile-map-display {
+    height: 600px;
+    border-radius: 0.5rem;
+    border: 1px solid #d1d5db;
+}
+#property-map {
+    height: 400px; /* A bit smaller for the form */
 }
 
-/* Hide sections by default, manage visibility with JS */
+/* Custom styles for hidden sections to avoid layout shifts */
 .hidden-section {
-  display: none;
+    display: none;
 }
 
 /* Modal styles */
 .modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: rgba(0, 0, 0, 0.7);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  z-index: 1000;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.6);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
 }
 
 .modal-content {
-  background: white;
-  padding: 2rem;
-  border-radius: 0.75rem;
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
-  max-width: 90%;
-  width: 500px;
-  position: relative;
-  max-height: 90vh;
-  overflow-y: auto;
-}
-
-.close-button {
-  position: absolute;
-  top: 1rem;
-  right: 1rem;
-  font-size: 1.5rem;
-  cursor: pointer;
-  color: #4a5568;
-}
-
-/* Loading indicator style */
-.loading-indicator {
-  text-align: center;
-  padding: 1rem;
-  font-style: italic;
-  color: #4a5568;
-}
-
-/* Style for the color dots in the map legend */
-.legend-dot {
-  height: 12px;
-  width: 12px;
-  border-radius: 50%;
-  display: inline-block;
-  margin-right: 6px;
-  border: 1px solid rgba(0,0,0,0.2);
-}
-
-/* Style for highlighting list items on hover */
-.list-item-highlight {
-  background-color: #e0f2fe; /* A light blue color */
-  border-left: 4px solid #0ea5e9; /* A darker blue left border */
-  transition: background-color 0.2s ease-in-out;
-}
-
-/* Custom DivIcon for colored markers */
-.custom-marker-icon {
-  border-radius: 50%;
-  border: 2px solid white;
-  box-shadow: 0 2px 5px rgba(0,0,0,0.4);
-}
-
-.custom-marker-icon-highlight {
-  transform: scale(1.5);
-  box-shadow: 0 0 10px #ffed00; /* Yellow glow */
+    background: white;
+    padding: 2rem;
+    border-radius: 0.5rem;
+    width: 90%;
+    max-width: 500px;
+    max-height: 90vh;
+    overflow-y: auto;
+    position: relative;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.1);
 }
 
 .full-page-section {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: white;
-  z-index: 900;
-  overflow-y: auto;
-  padding: 2rem;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.6);
+    z-index: 1000;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    overflow-y: auto;
+    padding: 2rem 0;
 }
 
 .full-page-section .modal-content {
-  width: 100%;
-  max-width: 800px;
-  margin: auto;
-  box-shadow: none;
+    max-width: 900px;
 }
 
-/* Add these new styles to the END of your style.css file */
+.close-button {
+    position: absolute;
+    top: 10px;
+    right: 20px;
+    font-size: 2rem;
+    color: #6b7280;
+    cursor: pointer;
+    line-height: 1;
+}
+.close-button:hover {
+    color: #1f2937;
+}
 
-.leaflet-control-custom {
+/* Map Legend Styles */
+.legend-dot {
+    height: 12px;
+    width: 12px;
+    border-radius: 50%;
+    display: inline-block;
+    margin-right: 5px;
+    border: 1px solid rgba(0,0,0,0.2);
+}
+
+.map-search-icon {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    z-index: 401; /* Must be higher than map panes (400) but lower than popups */
     background: white;
     border-radius: 4px;
     box-shadow: 0 1px 5px rgba(0,0,0,0.65);
     cursor: pointer;
-    width: 36px;
-    height: 36px;
+    width: 34px;
+    height: 34px;
     display: flex;
     align-items: center;
     justify-content: center;
 }
-.leaflet-control-custom:hover {
+.map-search-icon:hover {
     background-color: #f4f4f4;
 }
-.leaflet-control-custom svg {
-    width: 24px;
-    height: 24px;
+.map-search-icon svg {
+    width: 20px;
+    height: 20px;
     color: #333;
 }
-
 .map-search-content {
     background: white;
     padding: 20px;
@@ -137,21 +118,20 @@ body {
     width: 90%;
     max-width: 500px;
 }
-
 #geocoder-container .leaflet-control-geocoder {
     box-shadow: none;
 }
 #geocoder-container .leaflet-control-geocoder-form {
     height: 40px;
 }
-
 #geocoder-container .leaflet-control-geocoder-form input {
     width: 100%;
     height: 100%;
     font-size: 1rem;
     padding: 0 10px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
 }
-
 #geocoder-container .leaflet-control-geocoder-icon {
     display: none;
 }

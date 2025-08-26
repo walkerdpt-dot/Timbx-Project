@@ -1,6 +1,6 @@
 // js/map.js
 let globalMap, propertyMap, signupMap, editProfileMap, drawnItems, lastDrawnLayer, locationMarker, serviceAreaCircle;
-let profileMap; // Variable to track the profile map instance
+let profileMap;
 
 function destroyMap(mapInstance) {
     if (mapInstance) {
@@ -9,60 +9,65 @@ function destroyMap(mapInstance) {
     return null;
 }
 
-function addLayerAndSearchControls(map) {
-    const streets = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap' });
-    const satellite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { attribution: '&copy; Esri' });
-    const hybridLabels = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}');
-    const hybridGroup = L.layerGroup([satellite, hybridLabels]);
+// js/map.js
 
-    hybridGroup.addTo(map);
+function addLayerControls(map) {
+    // Define the individual layers using reliable, token-free providers
+    const streets = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { 
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors' 
+    });
+    const satellite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+        attribution: 'Tiles &copy; Esri'
+    });
+    const hybridLabels = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', {
+        attribution: 'Tiles &copy; Esri',
+        // Ensure labels appear on top of other layers
+        pane: 'overlayPane' 
+    });
+    
+    // NEW: Layer for roads and transportation network
+    const hybridTransportation = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}', {
+        attribution: 'Tiles &copy; Esri',
+        // Ensure roads appear on top of satellite imagery
+        pane: 'overlayPane' 
+    });
 
+    // UPDATED: Create a Layer Group for the Hybrid view by combining satellite, transportation, and labels
+    const hybridGroup = L.layerGroup([satellite, hybridTransportation, hybridLabels]);
+
+    // Define the base maps object for the control
     const baseMaps = {
         "Hybrid": hybridGroup,
         "Streets": streets,
         "Satellite": satellite
     };
-    L.control.layers(baseMaps, null, { position: 'topright' }).addTo(map);
 
-    // --- DEFINITIVE FIX START ---
-    // This is the correct and final way to create and add a custom Leaflet control.
-    L.Control.Search = L.Control.extend({
-        options: {
-            position: 'topleft' // The position must be defined in the options object.
-        },
-        onAdd: function(map) {
-            const container = L.DomUtil.create('div', 'leaflet-bar leaflet-control leaflet-control-custom leaflet-search-icon');
-            container.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-6 h-6"><path fill-rule="evenodd" d="M10.5 3.75a6.75 6.75 0 100 13.5 6.75 6.75 0 000-13.5zM2.25 10.5a8.25 8.25 0 1114.59 5.28l4.69 4.69a.75.75 0 11-1.06 1.06l-4.69-4.69A8.25 8.25 0 012.25 10.5z" clip-rule="evenodd" /></svg>`;
-            container.onclick = function(e) {
-                e.stopPropagation();
-                document.getElementById('map-search-modal').classList.remove('hidden');
-            };
-            return container;
-        }
-    });
-    // This correctly creates an instance of our new control and adds it to the map.
-    map.addControl(new L.Control.Search());
-    // --- DEFINITIVE FIX END ---
-    
-    const geocoderContainer = document.getElementById('geocoder-container');
-    if(geocoderContainer){
-        const geocoder = L.Control.geocoder({
-            defaultMarkGeocode: false,
-            collapsed: false,
-            placeholder: 'Search for a location...',
-        }).on('markgeocode', function(e) {
-            map.fitBounds(e.geocode.bbox);
-            document.getElementById('map-search-modal').classList.add('hidden');
-        });
-        geocoder.addTo(geocoderContainer);
-    }
+    // Add the Hybrid group to the map first to make it the default
+    hybridGroup.addTo(map);
+
+    // Add the layer switcher control to the map
+    L.control.layers(baseMaps, null, { position: 'topright' }).addTo(map);
 }
 
+export function createGeocoder(map) {
+    const geocoderContainer = document.getElementById('geocoder-container');
+    geocoderContainer.innerHTML = '';
+    
+    const geocoder = L.Control.geocoder({
+        defaultMarkGeocode: false,
+        collapsed: false,
+        placeholder: 'Search for a location...',
+    }).on('markgeocode', function(e) {
+        map.fitBounds(e.geocode.bbox);
+        document.getElementById('map-search-modal').classList.add('hidden');
+    });
+    geocoder.addTo(geocoderContainer);
+}
 
 export function initGlobalMap(onMoveEndCallback) {
     globalMap = destroyMap(globalMap);
     globalMap = L.map('global-map').setView([34.7465, -92.2896], 7);
-    addLayerAndSearchControls(globalMap);
+    addLayerControls(globalMap);
     if (onMoveEndCallback) {
         globalMap.on('moveend', onMoveEndCallback);
     }
@@ -72,7 +77,7 @@ export function initPropertyFormMap(existingGeoJSON) {
     propertyMap = destroyMap(propertyMap);
     
     propertyMap = L.map('property-map').setView([34.7465, -92.2896], 10);
-    addLayerAndSearchControls(propertyMap);
+    addLayerControls(propertyMap);
 
     drawnItems = new L.FeatureGroup();
     propertyMap.addLayer(drawnItems);
@@ -170,7 +175,7 @@ export function initProfileDisplayMap(user) {
         zoomControl: true
     });
     
-    addLayerAndSearchControls(profileMap);
+    addLayerControls(profileMap);
 
     L.marker([lat, lng]).addTo(profileMap);
 
@@ -190,7 +195,7 @@ export function initSignupMap(role) {
     signupMap = destroyMap(signupMap);
     
     signupMap = L.map(mapId).setView([34.7465, -92.2896], 5);
-    addLayerAndSearchControls(signupMap);
+    addLayerControls(signupMap);
 
     locationMarker = null;
 
@@ -214,7 +219,7 @@ export function initEditProfileMap(user) {
     const radius = user.serviceRadius || 50;
 
     editProfileMap = L.map('edit-profile-map').setView([lat, lng], 7);
-    addLayerAndSearchControls(editProfileMap);
+    addLayerControls(editProfileMap);
 
     locationMarker = L.marker([lat, lng], { draggable: true }).addTo(editProfileMap);
     serviceAreaCircle = L.circle([lat, lng], {
@@ -248,6 +253,21 @@ export function getUpdatedLocation() {
         return { lat: latLng.lat, lng: latLng.lng };
     }
     return null;
+}
+
+export function getMapInstance(mapId) {
+    switch (mapId) {
+        case 'global-map': return globalMap;
+        case 'property-map': return propertyMap;
+        case 'profile-map-display': return profileMap;
+        case 'forester-signup-map':
+        case 'buyer-signup-map':
+        case 'contractor-signup-map':
+            return signupMap;
+        case 'edit-profile-map':
+            return editProfileMap;
+        default: return null;
+    }
 }
 
 let propertyMarkers = [];
