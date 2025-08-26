@@ -1,26 +1,50 @@
-/* General Body Styles */
+/* =================================================================== */
+/* General Body & Typography Styles                                    */
+/* =================================================================== */
+
 body {
     background-color: #f0fdf4; /* A very light green for the background */
     color: #1f2937; /* Dark gray for text */
 }
 
-/* Map container heights */
-#global-map, #property-map, #forester-signup-map, #buyer-signup-map, #contractor-signup-map, #edit-profile-map, #profile-map-display {
-    height: 600px;
-    border-radius: 0.5rem;
-    border: 1px solid #d1d5db;
-}
-#property-map {
-    height: 400px; /* A bit smaller for the form */
-}
-
-/* Custom styles for hidden sections to avoid layout shifts */
 .hidden-section {
     display: none;
 }
 
-/* Modal styles */
-.modal-overlay {
+/* =================================================================== */
+/* Map Container Styles                                                */
+/* =================================================================== */
+
+/* Default height for most map containers */
+#global-map, #forester-signup-map, #buyer-signup-map, #contractor-signup-map, #edit-profile-map, #profile-map-display, #my-properties-map {
+    height: 600px;
+}
+
+/* Specific smaller height for the property form map */
+#property-map {
+    height: 400px;
+}
+
+/* Shared styles for ALL map containers to avoid duplication */
+#global-map, #property-map, #forester-signup-map, #buyer-signup-map, #contractor-signup-map, #edit-profile-map, #profile-map-display, #my-properties-map {
+    border-radius: 0.5rem;
+    border: 1px solid #d1d5db;
+}
+
+/* NEW/FIX: Ensures Leaflet map correctly fills its container */
+.leaflet-container {
+    width: 100%;
+    height: 100%;
+}
+
+
+/* =================================================================== */
+/* Modal & Overlay Styles                                              */
+/* =================================================================== */
+
+/* Combined styles for both standard and full-page modal backgrounds */
+.modal-overlay,
+.full-page-section {
     position: fixed;
     top: 0;
     left: 0;
@@ -33,6 +57,13 @@ body {
     z-index: 1000;
 }
 
+/* Specific styles for the full-page variant */
+.full-page-section {
+    overflow-y: auto;
+    padding: 2rem 0;
+}
+
+/* Default modal content box */
 .modal-content {
     background: white;
     padding: 2rem;
@@ -45,21 +76,7 @@ body {
     box-shadow: 0 10px 25px rgba(0,0,0,0.1);
 }
 
-.full-page-section {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background-color: rgba(0, 0, 0, 0.6);
-    z-index: 1000;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    overflow-y: auto;
-    padding: 2rem 0;
-}
-
+/* Wider content box for full-page modals */
 .full-page-section .modal-content {
     max-width: 900px;
 }
@@ -73,11 +90,15 @@ body {
     cursor: pointer;
     line-height: 1;
 }
+
 .close-button:hover {
     color: #1f2937;
 }
 
-/* Map Legend Styles */
+/* =================================================================== */
+/* Map-Specific UI Elements (Legend, Search, Geocoder)                 */
+/* =================================================================== */
+
 .legend-dot {
     height: 12px;
     width: 12px;
@@ -91,7 +112,7 @@ body {
     position: absolute;
     top: 10px;
     left: 10px;
-    z-index: 401; /* Must be higher than map panes (400) but lower than popups */
+    z-index: 401; /* Must be higher than map panes (400) */
     background: white;
     border-radius: 4px;
     box-shadow: 0 1px 5px rgba(0,0,0,0.65);
@@ -102,36 +123,50 @@ body {
     align-items: center;
     justify-content: center;
 }
+
 .map-search-icon:hover {
     background-color: #f4f4f4;
 }
+
 .map-search-icon svg {
     width: 20px;
     height: 20px;
     color: #333;
 }
-.map-search-content {
-    background: white;
-    padding: 20px;
-    border-radius: 8px;
-    position: relative;
-    width: 90%;
-    max-width: 500px;
-}
+
 #geocoder-container .leaflet-control-geocoder {
     box-shadow: none;
 }
-#geocoder-container .leaflet-control-geocoder-form {
-    height: 40px;
-}
+
 #geocoder-container .leaflet-control-geocoder-form input {
     width: 100%;
-    height: 100%;
+    height: 40px;
     font-size: 1rem;
     padding: 0 10px;
     border: 1px solid #ccc;
     border-radius: 4px;
 }
+
 #geocoder-container .leaflet-control-geocoder-icon {
     display: none;
+}
+
+/* =================================================================== */
+/* Leaflet.Draw Plugin Overrides                                       */
+/* =================================================================== */
+
+/* This targets the small squares at each vertex while editing */
+.leaflet-editing-icon {
+  background-color: #ff4136 !important; /* A bright red */
+  width: 8px !important;
+  height: 8px !important;
+  margin-left: -4px !important;
+  margin-top: -4px !important;
+  border-radius: 1px;
+}
+
+/* This targets the larger square that appears in the middle of a line segment */
+.leaflet-vertex-icon.leaflet-vertex-icon-middle {
+    background-color: #ff4136 !important;
+    opacity: 0.7;
 }
