@@ -9,9 +9,7 @@ function destroyMap(mapInstance) {
     return null;
 }
 
-// FIXED: Added 'export' so this function can be imported and used in other files.
 export function addLayerControls(map) {
-    // Define the individual layers using reliable, token-free providers
     const streets = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { 
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors' 
     });
@@ -52,18 +50,18 @@ export function createGeocoder(map) {
     geocoder.addTo(geocoderContainer);
 }
 
-// UPDATED: Now returns the map instance it creates
-export function initGlobalMap(onMoveEndCallback) {
+export function initGlobalMap(onMapInteraction) {
     globalMap = destroyMap(globalMap);
     globalMap = L.map('global-map').setView([34.7465, -92.2896], 7);
     addLayerControls(globalMap);
-    if (onMoveEndCallback) {
-        globalMap.on('moveend', onMoveEndCallback);
+
+    if (onMapInteraction) {
+        // This will fire once when the user starts dragging or zooming
+        globalMap.on('movestart', onMapInteraction, { once: true });
     }
-    return globalMap; // Return the instance
+    return globalMap;
 }
 
-// NEW: A dedicated initializer for the "My Properties" map
 export function initMyPropertiesMap() {
     myPropertiesMap = destroyMap(myPropertiesMap);
     myPropertiesMap = L.map('my-properties-map').setView([34.7465, -92.2896], 7);

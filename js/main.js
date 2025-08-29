@@ -1,6 +1,6 @@
 // js/main.js
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
-import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
+import { getFirestore, doc, getDoc, setDoc, updateDoc } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
 import { firebaseConfig } from './config.js';
 import { initializeAuth, handleLogin, handleSignup, handleLogout } from './auth.js';
 import { 
@@ -36,42 +36,24 @@ function createInteractiveMapAndList(mapInstance, listContainer, properties) {
     }
 
     if (!properties || properties.length === 0) {
-        const isMyProperties = listContainer.id === 'my-properties-list-container';
-        if (!isMyProperties) {
+        if (listContainer.id !== 'my-properties-list-container') {
              listContainer.innerHTML = `<div class="p-2 text-center text-gray-500">No properties in this view.</div>`;
         }
         return;
     }
 
-    const allBounds = [];
     const listFragment = document.createDocumentFragment();
-    const isMyPropertiesList = listContainer.id === 'my-properties-list-container';
 
     properties.forEach(prop => {
         const li = document.createElement('div');
         li.className = 'p-3 border-b last:border-b-0 cursor-pointer hover:bg-gray-100 transition-colors duration-150';
         li.dataset.propertyId = prop.id;
-
-        if (isMyPropertiesList) {
-             li.innerHTML = `
-                <h4 class="font-bold text-xl text-green-800">${prop.name}</h4>
-                <p class="text-sm text-gray-600">Service: <span class="font-medium text-gray-800">${prop.serviceType || 'N/A'}</span></p>
-                <div class="grid grid-cols-2 gap-x-4 gap-y-1 text-sm mt-2">
-                    <div><p class="text-gray-500">Acreage</p><p class="font-semibold">${prop.acreage?.toFixed(2) || 'N/A'}</p></div>
-                    <div><p class="text-gray-500">Timber Type</p><p class="font-semibold">${prop.timberType || 'N/A'}</p></div>
-                </div>
-                <div class="mt-3 flex space-x-2">
-                    <button class="view-details-btn bg-blue-500 hover:bg-blue-600 text-white text-xs px-2 py-1.5 rounded-md font-semibold" data-property-id="${prop.id}">Details</button>
-                    <button class="edit-property-btn bg-yellow-500 hover:bg-yellow-600 text-white text-xs px-2 py-1.5 rounded-md font-semibold" data-property-id="${prop.id}">Edit</button>
-                    <button class="delete-property-btn bg-red-600 hover:bg-red-700 text-white text-xs px-2 py-1.5 rounded-md font-semibold" data-property-id="${prop.id}">Delete</button>
-                </div>`;
-        } else {
-            li.innerHTML = `
-                <div class="font-bold text-blue-700">${prop.name}</div>
-                <div class="text-sm">${prop.serviceType} - ${prop.acreage?.toFixed(2) || 'N/A'} acres</div>
-                <button class="view-details-btn text-xs text-blue-600 hover:underline font-semibold" data-property-id="${prop.id}">View Details</button>
-            `;
-        }
+        
+        li.innerHTML = `
+            <div class="font-bold text-blue-700">${prop.name}</div>
+            <div class="text-sm">${prop.serviceType} - ${prop.acreage?.toFixed(2) || 'N/A'} acres</div>
+            <button class="view-details-btn text-xs text-blue-600 hover:underline font-semibold" data-property-id="${prop.id}">View Details</button>
+        `;
         
         listFragment.appendChild(li);
         
@@ -90,7 +72,6 @@ function createInteractiveMapAndList(mapInstance, listContainer, properties) {
                 
                 mapLayers.set(prop.id, { layer: featureGroup, map: mapInstance, type: 'property' });
                 featureGroup.addTo(mapInstance);
-                allBounds.push(polygonLayer.getBounds());
 
                 li.addEventListener('mouseenter', () => {
                     polygonLayer.setStyle({ color: 'yellow', weight: 4 });
@@ -117,10 +98,6 @@ function createInteractiveMapAndList(mapInstance, listContainer, properties) {
     });
     
     listContainer.appendChild(listFragment);
-
-    if (allBounds.length > 0 && !isMyPropertiesList) {
-        mapInstance.fitBounds(L.latLngBounds(allBounds), { padding: [50, 50] });
-    }
 }
 
 
@@ -175,6 +152,17 @@ function attachAllEventListeners() {
     document.getElementById('close-map-search-modal')?.addEventListener('click', () => closeModal('map-search-modal'));
     document.getElementById('close-property-detail-modal')?.addEventListener('click', () => closeModal('property-detail-modal'));
     document.getElementById('close-user-profile-modal')?.addEventListener('click', () => closeModal('user-profile-modal'));
+    document.getElementById('success-later-btn')?.addEventListener('click', () => closeModal('save-success-modal'));
+    document.getElementById('success-find-forester-btn')?.addEventListener('click', handleFindForesterFromSuccess);
+
+    document.getElementById('search-this-area-btn')?.addEventListener('click', () => {
+        updateMapAndList(allProperties, allProfessionalProfiles);
+        const btn = document.getElementById('search-this-area-btn');
+        btn.classList.add('hidden');
+        if (globalMap) {
+            globalMap.on('movestart', showSearchAreaButton, { once: true });
+        }
+    });
 
     document.getElementById('login-form')?.addEventListener('submit', async (e) => {
         e.preventDefault();
@@ -236,6 +224,17 @@ function attachAllEventListeners() {
             return;
         }
 
+        const findForesterBtn = e.target.closest('.find-forester-notification-btn');
+        if (findForesterBtn) {
+            const propertyId = findForesterBtn.dataset.propertyId;
+            const prop = allProperties.find(p => p.id === propertyId) || await getPropertyById(db, propertyId);
+            if (prop) {
+                sessionStorage.setItem('foresterFinder_propertyId', prop.id);
+                sessionStorage.setItem('foresterFinder_geoJSON', JSON.stringify(prop.geoJSON));
+                navigateToSection('marketplace');
+            }
+        }
+
         const searchIcon = e.target.closest('.map-search-icon');
         if (searchIcon) {
             const mapId = searchIcon.dataset.mapId;
@@ -263,6 +262,13 @@ function attachAllEventListeners() {
     });
 }
 
+function showSearchAreaButton() {
+    const btn = document.getElementById('search-this-area-btn');
+    if (btn) {
+        btn.classList.remove('hidden');
+    }
+}
+
 function showSection(id) {
     window.location.hash = id;
     document.querySelectorAll('main section').forEach(sec => sec.classList.add('hidden-section'));
@@ -276,10 +282,32 @@ async function navigateToSection(id) {
     showSection(id);
     switch (id) {
         case 'marketplace':
+            const foresterFinderPropertyId = sessionStorage.getItem('foresterFinder_propertyId');
+            
             if (!globalMap || !document.getElementById('global-map')._leaflet_id) {
-                globalMap = initGlobalMap(); 
+                globalMap = initGlobalMap(showSearchAreaButton); 
             }
-            updateMapAndList(allProperties, allProfessionalProfiles);
+
+            if (foresterFinderPropertyId) {
+                document.querySelectorAll('#map-filters input[type="checkbox"]').forEach(box => {
+                    box.checked = box.id === 'filter-foresters';
+                });
+                
+                const geoJSON = JSON.parse(sessionStorage.getItem('foresterFinder_geoJSON'));
+                if (geoJSON) {
+                    const tempLayer = L.geoJSON({ type: 'Polygon', coordinates: [geoJSON.geometry.coordinates] });
+                    
+                    globalMap.once('moveend', () => {
+                        updateMapAndList(allProperties, allProfessionalProfiles);
+                    });
+                    globalMap.fitBounds(tempLayer.getBounds(), { maxZoom: 12 });
+                }
+
+                sessionStorage.removeItem('foresterFinder_propertyId');
+                sessionStorage.removeItem('foresterFinder_geoJSON');
+            } else {
+                updateMapAndList(allProperties, allProfessionalProfiles);
+            }
             break;
         case 'properties':
             await renderPropertiesForCurrentUser();
@@ -303,22 +331,17 @@ function updateLoginUI() {
         loginBtn.classList.add('hidden');
         signupBtn.classList.add('hidden');
         logoutBtn.classList.remove('hidden');
-
         const isSeller = currentUser.role === 'seller';
         propertiesLoginPrompt.classList.toggle('hidden', isSeller);
         propertiesMainContent.classList.toggle('hidden', !isSeller);
-        
         if (profileLoginPrompt) profileLoginPrompt.classList.add('hidden');
         if (profileDetails) profileDetails.classList.remove('hidden');
-
     } else { 
         loginBtn.classList.remove('hidden');
         signupBtn.classList.remove('hidden');
         logoutBtn.classList.add('hidden');
-        
         propertiesLoginPrompt.classList.remove('hidden');
         propertiesMainContent.classList.add('hidden');
-
         if (profileLoginPrompt) profileLoginPrompt.classList.remove('hidden');
         if (profileDetails) profileDetails.classList.add('hidden');
     }
@@ -440,8 +463,6 @@ async function renderPropertiesForCurrentUser() {
     
     const userProperties = await getPropertiesForCurrentUser(db, currentUser.uid);
     
-    // The createInteractiveMapAndList function is now only for the marketplace
-    // We need a dedicated function for the "My Properties" list
     renderMyPropertiesList(myPropertiesMap, listContainer, userProperties);
 }
 
@@ -467,13 +488,24 @@ function renderMyPropertiesList(mapInstance, listContainer, properties) {
         const li = document.createElement('div');
         li.className = 'p-3 border-b last:border-b-0 cursor-pointer hover:bg-gray-100 transition-colors duration-150';
         li.dataset.propertyId = prop.id;
+        
+        const needsForester = (prop.serviceType === 'Timber Harvest' || prop.serviceType === 'Forester Recommendation');
+        const hasForester = prop.foresterId;
+        let notificationHTML = '';
+        if (needsForester && !hasForester) {
+            notificationHTML = `
+                <div class="mt-2 p-2 bg-yellow-100 border border-yellow-300 rounded-md text-sm">
+                    <p class="font-semibold">Action Required</p>
+                    <p>This property needs a forester assessment.</p>
+                    <button class="find-forester-notification-btn text-blue-600 hover:underline font-bold" data-property-id="${prop.id}">Find a Forester</button>
+                </div>
+            `;
+        }
+        
         li.innerHTML = `
             <h4 class="font-bold text-xl text-green-800">${prop.name}</h4>
             <p class="text-sm text-gray-600">Service: <span class="font-medium text-gray-800">${prop.serviceType || 'N/A'}</span></p>
-            <div class="grid grid-cols-2 gap-x-4 gap-y-1 text-sm mt-2">
-                <div><p class="text-gray-500">Acreage</p><p class="font-semibold">${prop.acreage?.toFixed(2) || 'N/A'}</p></div>
-                <div><p class="text-gray-500">Timber Type</p><p class="font-semibold">${prop.timberType || 'N/A'}</p></div>
-            </div>
+            ${notificationHTML}
             <div class="mt-3 flex space-x-2">
                 <button class="view-details-btn bg-blue-500 hover:bg-blue-600 text-white text-xs px-2 py-1.5 rounded-md font-semibold" data-property-id="${prop.id}">Details</button>
                 <button class="edit-property-btn bg-yellow-500 hover:bg-yellow-600 text-white text-xs px-2 py-1.5 rounded-md font-semibold" data-property-id="${prop.id}">Edit</button>
@@ -530,7 +562,6 @@ function updateMapAndList(allProperties, allProfessionalProfiles) {
     const listContainer = document.getElementById('dynamic-map-list');
     const bounds = globalMap.getBounds();
     
-    // Clear all layers before redrawing
     for (const [key, value] of mapLayers.entries()) {
         if (value.map === globalMap) {
             globalMap.removeLayer(value.layer);
@@ -562,6 +593,7 @@ function updateMapAndList(allProperties, allProfessionalProfiles) {
     createInteractiveMapAndList(globalMap, listContainer, visibleProperties);
 
     let itemsInView = visibleProperties.length;
+    const professionalListFragment = document.createDocumentFragment();
     allProfessionalProfiles.forEach(prof => {
         const roleKey = prof.role + 's';
         if (filters[roleKey] && prof.location) {
@@ -605,15 +637,17 @@ function updateMapAndList(allProperties, allProfessionalProfiles) {
                         marker.openPopup();
                     }
                 };
-                listContainer.appendChild(li);
+                professionalListFragment.appendChild(li);
             }
         }
     });
+    listContainer.appendChild(professionalListFragment);
 
     if (itemsInView === 0) {
         listContainer.innerHTML = '<li class="p-2 text-center text-gray-500">No items in the current map view.</li>';
     }
 }
+
 
 function renderMyProfile() {
     if (!currentUser) return;
@@ -698,18 +732,39 @@ async function handleSaveProperty(event) {
         return;
     }
     try {
+        let savedProperty;
         if (propertyId) {
             await updateProperty(db, propertyId, geoJSON, propertyData);
-            alert('Property updated successfully!');
+            savedProperty = { id: propertyId, ...propertyData, geoJSON };
         } else {
-            await saveNewProperty(db, currentUser, geoJSON, propertyData);
-            alert('Property saved successfully!');
+            savedProperty = await saveNewProperty(db, currentUser, geoJSON, propertyData);
         }
+        
+        allProperties = await fetchProperties(db);
         closeModal('property-form-modal');
         await renderPropertiesForCurrentUser();
+
+        if (savedProperty.serviceType === 'Timber Harvest' || savedProperty.serviceType === 'Forester Recommendation') {
+            const findBtn = document.getElementById('success-find-forester-btn');
+            findBtn.dataset.propertyId = savedProperty.id;
+            findBtn.dataset.geoJSON = JSON.stringify(savedProperty.geoJSON);
+            openModal('save-success-modal');
+        } else {
+            alert('Property saved successfully!');
+        }
+
     } catch (error) {
         alert(error.message);
     }
+}
+
+function handleFindForesterFromSuccess(event) {
+    const propertyId = event.target.dataset.propertyId;
+    const geoJSON = event.target.dataset.geoJSON;
+    sessionStorage.setItem('foresterFinder_propertyId', propertyId);
+    sessionStorage.setItem('foresterFinder_geoJSON', geoJSON);
+    closeModal('save-success-modal');
+    navigateToSection('marketplace');
 }
 
 function openPropertyDetailModal(property) {
@@ -741,6 +796,15 @@ function openUserProfileModal(user) {
     const profileContent = document.getElementById('user-profile-content');
     if (!profileContent) return;
 
+    const propertyIdForRequest = sessionStorage.getItem('foresterFinder_propertyId');
+    let requestButtonHTML = '';
+    if (propertyIdForRequest && user.role === 'forester') {
+        const property = allProperties.find(p => p.id === propertyIdForRequest);
+        if (property) {
+            requestButtonHTML = `<button id="send-request-to-forester" data-forester-id="${user.id}" data-property-id="${propertyIdForRequest}" class="w-full mt-4 bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg">Request Service for ${property.name}</button>`;
+        }
+    }
+
     const defaultAvatar = 'https://placehold.co/128x128/8f8f8f/ffffff?text=No+Image';
     const role = user.role ? user.role.charAt(0).toUpperCase() + user.role.slice(1) : 'N/A';
     
@@ -765,7 +829,13 @@ function openUserProfileModal(user) {
              <h4 class="font-semibold text-gray-800">Service Area</h4>
              <div id="profile-map-display" class="w-full h-64 rounded-lg border"></div>
         </div>
+        ${requestButtonHTML}
     `;
+    
+    const requestBtn = profileContent.querySelector('#send-request-to-forester');
+    if (requestBtn) {
+        requestBtn.addEventListener('click', handleSendRequestToForester);
+    }
 
     openModal('user-profile-modal');
     
@@ -773,8 +843,24 @@ function openUserProfileModal(user) {
        initProfileDisplayMap(user);
     } else {
        const mapContainer = profileContent.querySelector('#profile-modal-map-container');
-       if(mapContainer) mapContainer.innerHTML = '<p class="text-center text-gray-500 p-4">No service area specified.</p>';
+       if(mapContainer) {
+            const mapDisplay = mapContainer.querySelector('#profile-map-display');
+            if(mapDisplay) mapDisplay.innerHTML = '<p class="text-center text-gray-500 p-4">No service area specified.</p>';
+       }
     }
+}
+
+async function handleSendRequestToForester(event) {
+    const foresterId = event.target.dataset.foresterId;
+    const propertyId = event.target.dataset.propertyId;
+
+    if (!foresterId || !propertyId) return;
+    
+    console.log(`Sending inquiry for property ${propertyId} to forester ${foresterId}`);
+    alert('Your request has been sent to the forester! They will be in touch if they accept the project.');
+    
+    closeModal('user-profile-modal');
+    navigateToSection('properties');
 }
 
 async function loginAsDemoUser(role) {
