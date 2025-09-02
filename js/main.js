@@ -1,13 +1,14 @@
 // js/main.js
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
 import { getFirestore, doc, getDoc, setDoc, updateDoc, collection, addDoc, serverTimestamp, query, where, getDocs } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
+import { signInWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
 import { firebaseConfig } from './config.js';
 import { initializeAuth, handleLogin, handleSignup, handleLogout } from './auth.js';
 import {
     fetchProperties, fetchProfessionalProfiles, fetchProjects, saveNewProperty, updateProperty,
     deleteProperty, getPropertyById, getPropertiesForCurrentUser,
     updateUserProfile, saveMarketplaceDataToSession, getUserProfileById,
-    updateProject, deleteProject, saveNewProject
+    updateProject, deleteProject, saveNewProject, sendCruiseInquiry, fetchInquiriesForUser, getUserProfile
 } from './firestore.js';
 import {
     initGlobalMap, initPropertyFormMap, getLastDrawnGeoJSON,
@@ -35,6 +36,7 @@ let currentUser = null;
 let allProperties = [];
 let allProjects = [];
 let allProfessionalProfiles = [];
+let allInquiries = [];
 let db, auth;
 let mapLayers = new Map();
 
@@ -70,24 +72,42 @@ document.addEventListener('DOMContentLoaded', async () => {
     db = getFirestore(app);
     auth = initializeAuth(app, db, onUserStatusChange);
 
-    try {
-        [allProperties, allProfessionalProfiles, allProjects] = await Promise.all([
-            fetchProperties(db),
-            fetchProfessionalProfiles(db),
-            fetchProjects(db)
-        ]);
-        saveMarketplaceDataToSession(allProperties, allProfessionalProfiles);
-    } catch (error) {
-        console.error("Failed to fetch initial marketplace data:", error);
-    }
-
     attachAllEventListeners();
     window.addEventListener('hashchange', handleNavigation);
     await handleNavigation();
 });
 
-function onUserStatusChange(user) {
+async function onUserStatusChange(user) {
     currentUser = user;
+    const professionalRoles = ['forester', 'buyer', 'logging-contractor', 'service-provider'];
+    if (user && user.uid) {
+        try {
+            const dataPromises = [
+                fetchProperties(db),
+                fetchProfessionalProfiles(db),
+                fetchProjects(db)
+            ];
+            
+            if (professionalRoles.includes(user.role)) {
+                dataPromises.push(fetchInquiriesForUser(db, user.uid));
+            }
+
+            const [properties, profiles, projects, inquiries] = await Promise.all(dataPromises);
+            allProperties = properties;
+            allProfessionalProfiles = profiles;
+            allProjects = projects;
+            allInquiries = inquiries || [];
+            
+            saveMarketplaceDataToSession(allProperties, allProfessionalProfiles);
+        } catch (error) {
+            console.error("Failed to fetch initial marketplace data:", error);
+        }
+    } else {
+        allProperties = [];
+        allProfessionalProfiles = [];
+        allProjects = [];
+        allInquiries = [];
+    }
     updateLoginUI();
     handleNavigation();
 }
@@ -128,6 +148,7 @@ async function renderMainSection(sectionId) {
                     map.on('movestart', () => document.getElementById('search-this-area-btn').classList.remove('hidden'));
                 }
             }
+            setTimeout(() => getMapInstance('global-map')?.invalidateSize(), 0);
 
             const filter = sessionStorage.getItem('filterMarketplace');
             if (filter === 'foresters') {
@@ -141,6 +162,9 @@ async function renderMainSection(sectionId) {
             break;
         case 'properties':
             await renderPropertiesForCurrentUser();
+            break;
+        case 'my-inquiries':
+            await renderInquiriesForCurrentUser();
             break;
         case 'my-profile':
             renderMyProfile();
@@ -187,6 +211,18 @@ function attachAllEventListeners() {
     document.getElementById('log-load-form')?.addEventListener('submit', handleLogLoadSubmit);
     document.getElementById('load-gross-weight')?.addEventListener('input', calculateNetWeight);
     document.getElementById('load-tare-weight')?.addEventListener('input', calculateNetWeight);
+    
+    // Event listener for the "Find a Forester Now" button in the success modal
+    document.getElementById('success-find-forester-btn')?.addEventListener('click', () => {
+        const lastSavedPropertyId = document.getElementById('save-success-modal').dataset.propertyId;
+        if (lastSavedPropertyId) {
+            closeModal('save-success-modal');
+            openInviteForesterModal(lastSavedPropertyId);
+        } else {
+            alert("Could not find the property to start an inquiry. Please go to 'My Properties'.");
+        }
+    });
+
 
     document.getElementById('signup-role')?.addEventListener('change', (event) => {
         const role = event.target.value;
@@ -201,6 +237,21 @@ function attachAllEventListeners() {
     document.body.addEventListener('click', async (e) => {
         const targetButton = e.target.closest('button, a');
         if (!targetButton) return;
+        
+        if (targetButton.matches('.submit-quote-action-btn')) {
+            const inquiryId = targetButton.dataset.inquiryId;
+            openForesterQuoteModal(inquiryId);
+        }
+
+        // --- Dropdown Menu Logic ---
+        if (targetButton.matches('.more-options-btn')) {
+            const dropdown = targetButton.nextElementSibling;
+            document.querySelectorAll('.more-options-dropdown').forEach(d => {
+                if (d !== dropdown) d.classList.add('hidden');
+            });
+            dropdown.classList.toggle('hidden');
+            return; 
+        }
 
         // --- Property Management Buttons ---
         if (targetButton.matches('.edit-property-btn')) {
@@ -223,6 +274,12 @@ function attachAllEventListeners() {
             const propertyId = targetButton.dataset.propertyId;
             const propertyName = targetButton.dataset.propertyName;
             openServiceSelectModal(propertyId, propertyName);
+        }
+
+        // --- "Get Cruise" Workflow ---
+        if (targetButton.matches('.get-cruise-btn')) {
+            const propertyId = targetButton.dataset.propertyId;
+            openInviteForesterModal(propertyId);
         }
 
         // --- Project/Listing Management Buttons ---
@@ -250,6 +307,13 @@ function attachAllEventListeners() {
             }
         }
     });
+    
+    // Close dropdowns if clicking elsewhere on the page
+    document.addEventListener('click', (e) => {
+        if (!e.target.closest('.more-options-container')) {
+            document.querySelectorAll('.more-options-dropdown').forEach(d => d.classList.add('hidden'));
+        }
+    });
 
     // --- Service Select Modal Logic ---
     document.getElementById('service-select-modal')?.addEventListener('click', (e) => {
@@ -271,10 +335,10 @@ function attachAllEventListeners() {
     });
 
     // --- Forester First Modal Logic ---
-    document.getElementById('find-forester-btn')?.addEventListener('click', () => {
+    document.getElementById('find-forester-btn')?.addEventListener('click', (e) => {
         closeModal('forester-first-modal');
-        sessionStorage.setItem('filterMarketplace', 'foresters');
-        window.location.hash = '#marketplace';
+        const propertyId = e.target.closest('.modal-overlay').dataset.propertyId;
+        openInviteForesterModal(propertyId);
     });
 
     document.getElementById('proceed-without-forester-btn')?.addEventListener('click', (e) => {
@@ -285,6 +349,9 @@ function attachAllEventListeners() {
 
     // --- Timber Sale Form Logic ---
     document.getElementById('timber-sale-form')?.addEventListener('submit', handleTimberSaleSubmit);
+    
+    // --- Invite Forester Modal Logic ---
+    document.getElementById('send-invites-btn')?.addEventListener('click', handleSendCruiseInquiry);
 }
 
 function setupServiceFilter(checkboxId, dropdownId, services) {
@@ -312,13 +379,19 @@ function updateLoginUI() {
     document.getElementById('properties-login-prompt').classList.toggle('hidden', isSeller);
     document.getElementById('properties-main-content').classList.toggle('hidden', !isSeller);
     
+    const professionalRoles = ['forester', 'buyer', 'logging-contractor', 'service-provider'];
+    const isProfessional = isLoggedIn && professionalRoles.includes(currentUser.role);
+    document.getElementById('inquiries-login-prompt').classList.toggle('hidden', isProfessional);
+    document.getElementById('inquiries-main-content').classList.toggle('hidden', !isProfessional);
+    
     document.getElementById('profile-login-prompt').classList.toggle('hidden', isLoggedIn);
     document.getElementById('profile-details').classList.toggle('hidden', !isLoggedIn);
 
     document.querySelector('a[href="#properties"]').classList.toggle('hidden', !isSeller);
+    document.querySelector('a[href="#my-inquiries"]').classList.toggle('hidden', !isProfessional);
     
-    const professionalRoles = ['buyer', 'logging-contractor'];
-    document.querySelector('a[href="#haul-tickets"]').classList.toggle('hidden', !isLoggedIn || !professionalRoles.includes(currentUser?.role));
+    const haulTicketRoles = ['buyer', 'logging-contractor'];
+    document.querySelector('a[href="#haul-tickets"]').classList.toggle('hidden', !isLoggedIn || !haulTicketRoles.includes(currentUser?.role));
     
     document.querySelector('a[href="#my-loads"]').classList.toggle('hidden', !isLoggedIn || ['forester', 'service-provider'].includes(currentUser?.role));
     
@@ -339,6 +412,7 @@ async function renderDetailView(type, id, from) {
 
     document.getElementById('back-to-marketplace-btn').classList.toggle('hidden', from !== 'marketplace');
     document.getElementById('back-to-properties-btn').classList.toggle('hidden', from !== 'properties');
+    document.getElementById('back-to-my-inquiries-btn').classList.toggle('hidden', from !== 'my-inquiries');
 
     let data;
     switch (type) {
@@ -448,7 +522,7 @@ function renderProjectDetail(project) {
                         </tr>
                     </thead>
                     <tbody>
-                        ${project.inventory.map(item => `
+                        ${(project.inventory || []).map(item => `
                             <tr class="border-t">
                                 <td class="p-2">${item.product}</td>
                                 <td class="p-2 text-right">${item.volume}</td>
@@ -661,7 +735,7 @@ function updateMapAndList() {
                     
                     let servicesText = '';
                     if (proj.projectType === 'timber-sale') {
-                        servicesText = proj.harvestType; // e.g., "Clearcut"
+                        servicesText = proj.harvestType;
                     } else {
                         servicesText = (Array.isArray(proj.servicesNeeded) ? proj.servicesNeeded.join(', ') : '');
                     }
@@ -742,15 +816,15 @@ async function renderMyPropertiesList(properties) {
     const userProjectIds = allProjects.filter(p => p.ownerId === currentUser.uid).map(p => p.id);
     const bidsByProjectId = {};
     if (userProjectIds.length > 0) {
-          const bidsQuery = query(collection(db, 'bids'), where('projectId', 'in', userProjectIds));
-          const bidsSnapshot = await getDocs(bidsQuery);
-          bidsSnapshot.forEach(doc => {
-              const bid = doc.data();
-              if (!bidsByProjectId[bid.projectId]) {
-                  bidsByProjectId[bid.projectId] = [];
-              }
-              bidsByProjectId[bid.projectId].push(bid);
-          });
+        const bidsQuery = query(collection(db, 'bids'), where('projectId', 'in', userProjectIds));
+        const bidsSnapshot = await getDocs(bidsQuery);
+        bidsSnapshot.forEach(doc => {
+            const bid = doc.data();
+            if (!bidsByProjectId[bid.projectId]) {
+                bidsByProjectId[bid.projectId] = [];
+            }
+            bidsByProjectId[bid.projectId].push(bid);
+        });
     }
 
     const allBounds = [];
@@ -786,17 +860,27 @@ async function renderMyPropertiesList(properties) {
             `;
         } else {
             statusHTML = `<p class="text-sm text-gray-500 mt-1">Status: <span class="font-medium text-gray-700">${prop.serviceType || 'Not listed'}</span></p>`;
-            buttonHTML = `<button class="seek-services-btn bg-teal-500 hover:bg-teal-600 text-white text-xs px-2 py-1.5 rounded-md font-semibold" data-property-id="${prop.id}" data-property-name="${prop.name}">Seek Services</button>`;
+            buttonHTML = `<button class="get-cruise-btn bg-blue-600 hover:bg-blue-700 text-white text-xs px-2 py-1.5 rounded-md font-semibold" data-property-id="${prop.id}">Get a Professional Cruise</button>
+                          <button class="seek-services-btn bg-teal-500 hover:bg-teal-600 text-white text-xs px-2 py-1.5 rounded-md font-semibold" data-property-id="${prop.id}" data-property-name="${prop.name}">Seek Services</button>`;
         }
 
         li.innerHTML = `
-            <h4 class="font-bold text-xl text-green-800">${prop.name}</h4>
-            <p class="text-sm text-gray-600">${prop.acreage?.toFixed(2) || '0'} acres</p>
-            ${statusHTML}
-            <div class="mt-3 flex flex-wrap gap-2">
-                <a href="#detail?type=property&id=${prop.id}&from=properties" class="bg-blue-500 hover:bg-blue-600 text-white text-xs px-2 py-1.5 rounded-md font-semibold">Details</a>
-                <button class="edit-property-btn bg-yellow-500 hover:bg-yellow-600 text-white text-xs px-2 py-1.5 rounded-md font-semibold" data-property-id="${prop.id}">Edit</button>
+            <div>
+                <a href="#detail?type=property&id=${prop.id}&from=properties" class="font-bold text-xl text-green-800 hover:underline">${prop.name}</a>
+                <p class="text-sm text-gray-600">${prop.acreage?.toFixed(2) || '0'} acres</p>
+                ${statusHTML}
+            </div>
+            <div class="mt-3 flex flex-wrap gap-2 items-center">
                 ${buttonHTML}
+                <div class="relative ml-auto more-options-container">
+                    <button class="more-options-btn p-1.5 rounded-full hover:bg-gray-200">
+                        <svg class="w-5 h-5 text-gray-600" fill="currentColor" viewBox="0 0 20 20"><path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z"></path></svg>
+                    </button>
+                    <div class="more-options-dropdown hidden absolute right-0 mt-2 w-48 bg-white rounded-md shadow-xl z-10 border">
+                        <button class="edit-property-btn block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100" data-property-id="${prop.id}">Edit Property</button>
+                        <button class="delete-property-btn block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-100" data-property-id="${prop.id}">Delete Property</button>
+                    </div>
+                </div>
             </div>`;
         
         const viewBidsBtn = li.querySelector('.view-bids-btn');
@@ -826,9 +910,82 @@ async function renderMyPropertiesList(properties) {
 }
 
 
+// --- My Inquiries Section ---
+async function renderInquiriesForCurrentUser() {
+    const professionalRoles = ['forester', 'buyer', 'logging-contractor', 'service-provider'];
+    if (!currentUser || !professionalRoles.includes(currentUser.role)) {
+        return;
+    }
+
+    const container = document.getElementById('inquiries-main-content');
+    container.innerHTML = '<p class="text-center p-4">Loading your inquiries...</p>';
+
+    try {
+        const inquiries = allInquiries;
+
+        if (inquiries.length === 0) {
+            container.innerHTML = '<p class="text-center p-4 text-gray-600">You have no new inquiries at this time.</p>';
+            return;
+        }
+
+        inquiries.sort((a, b) => (b.createdAt?.toDate() || 0) - (a.createdAt?.toDate() || 0));
+
+        container.innerHTML = inquiries.map(inquiry => {
+            const inquiryDate = inquiry.createdAt?.toDate ? inquiry.createdAt.toDate().toLocaleDateString() : 'N/A';
+            return `
+                <div class="border rounded-lg p-4 shadow-sm bg-white hover:shadow-md transition-shadow">
+                    <div class="flex justify-between items-start flex-wrap gap-2">
+                        <div>
+                            <h3 class="text-lg font-bold text-green-700">${inquiry.propertyName}</h3>
+                            <p class="text-sm text-gray-500">From: <span class="font-semibold">${inquiry.fromUserName}</span></p>
+                            <p class="text-sm text-gray-500">Received: ${inquiryDate}</p>
+                        </div>
+                        <span class="text-sm font-medium py-1 px-3 rounded-full ${
+                            inquiry.status === 'pending' ? 'bg-yellow-200 text-yellow-800' :
+                            inquiry.status === 'accepted' ? 'bg-green-200 text-green-800' :
+                            'bg-gray-200 text-gray-800'
+                        }">${inquiry.status.charAt(0).toUpperCase() + inquiry.status.slice(1)}</span>
+                    </div>
+                    <p class="mt-3 text-gray-800 bg-gray-50 p-3 rounded-md">"${inquiry.message || 'No message provided.'}"</p>
+                    <div class="mt-4 pt-3 border-t flex items-center gap-3">
+                        <a href="#detail?type=property&id=${inquiry.propertyId}&from=my-inquiries" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md transition-colors text-sm">View Property Details</a>
+                        <button class="submit-quote-action-btn bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-2 px-4 rounded-md transition-colors text-sm" data-inquiry-id="${inquiry.id}">Submit Quote</button>
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+    } catch (error) {
+        console.error("Error rendering inquiries:", error);
+        container.innerHTML = '<p class="text-center p-4 text-red-500">Could not load inquiries. Please try refreshing the page.</p>';
+    }
+}
+
+function openForesterQuoteModal(inquiryId) {
+    const inquiry = allInquiries.find(i => i.id === inquiryId);
+    if (!inquiry) {
+        alert("Could not find the inquiry details. Please refresh the page.");
+        return;
+    }
+
+    const form = document.getElementById('submit-quote-form');
+    form.reset();
+    
+    document.getElementById('quote-project-id').value = inquiry.propertyId; 
+    document.getElementById('quote-landowner-id').value = inquiry.fromUserId;
+    
+    document.getElementById('submit-quote-title').textContent = `Quote for: ${inquiry.propertyName}`;
+    openModal('submit-quote-modal');
+}
+
+
 // --- Forms and Data Handling ---
 async function handleSaveProperty(event) {
     event.preventDefault();
+    if (!currentUser) {
+        alert("You must be logged in to save a property.");
+        return;
+    }
 
     const submitButton = event.target.querySelector('#btn-save-property');
     const originalButtonText = submitButton.textContent;
@@ -857,12 +1014,11 @@ async function handleSaveProperty(event) {
         }
         allProperties = await fetchProperties(db);
         closeModal('property-form-modal');
+        // Add property ID to the success modal for the "Find a Forester" button
+        document.getElementById('save-success-modal').dataset.propertyId = savedProperty.id;
         await renderPropertiesForCurrentUser();
-        if (['Timber Harvest', 'Forester Recommendation'].includes(savedProperty.serviceType)) {
-            openModal('save-success-modal');
-        } else {
-            alert('Property saved successfully!');
-        }
+        openModal('save-success-modal');
+
     } catch (error) {
         console.error("Error saving property:", error);
         alert("Could not save property. Please try again.");
@@ -918,6 +1074,126 @@ function openServiceSelectModal(propertyId, propertyName) {
     openModal('service-select-modal');
 }
 
+async function openInviteForesterModal(propertyId) {
+    const modal = document.getElementById('invite-forester-modal');
+    const property = allProperties.find(p => p.id === propertyId) || await getPropertyById(db, propertyId);
+    if (!property) {
+        console.error("Property not found for invite forester modal.");
+        return;
+    }
+
+    modal.dataset.propertyId = propertyId;
+    document.getElementById('invite-modal-property-name').textContent = property.name;
+
+    const foresterListContainer = document.getElementById('forester-invite-list');
+    foresterListContainer.innerHTML = `<p class="text-gray-500">Finding nearby foresters...</p>`;
+    
+    openModal('invite-forester-modal');
+    
+    const propertyGeoJSON = sanitizeGeoJSON(property.geoJSON);
+    if (!propertyGeoJSON?.geometry?.coordinates) {
+        foresterListContainer.innerHTML = `<p class="text-red-500">Property location is not defined. Cannot find nearby foresters.</p>`;
+        return;
+    }
+    const propertyCenter = L.geoJSON(propertyGeoJSON).getBounds().getCenter();
+
+    // Ensure all professional profiles are up to date before filtering
+    allProfessionalProfiles = await fetchProfessionalProfiles(db);
+
+    const nearbyForesters = allProfessionalProfiles.filter(profile => {
+        if (profile.role !== 'forester' || !profile.location || !profile.serviceRadius) {
+            return false;
+        }
+        
+        const foresterLatLng = L.latLng(profile.location.lat, profile.location.lng);
+        const distanceInMeters = propertyCenter.distanceTo(foresterLatLng);
+        const distanceInMiles = distanceInMeters / 1609.34;
+        
+        return distanceInMiles <= profile.serviceRadius;
+    });
+
+    if (nearbyForesters.length > 0) {
+        foresterListContainer.innerHTML = nearbyForesters
+            .sort((a, b) => (b.rating || 0) - (a.rating || 0)) // Sort by rating descending
+            .slice(0, 5) // Take top 5
+            .map(forester => {
+                const defaultAvatar = 'https://placehold.co/128x128/8f8f8f/ffffff?text=No+Image';
+                return `
+                    <div class="forester-invite-card flex items-center justify-between p-2 border rounded-md hover:bg-gray-50">
+                        <div class="flex items-center">
+                            <img src="${forester.profilePictureUrl || defaultAvatar}" alt="${forester.username}" class="w-12 h-12 rounded-full mr-3">
+                            <div>
+                                <p class="font-bold text-gray-800">${forester.username}</p>
+                                <p class="text-xs text-gray-500">${forester.company || 'Independent Forester'}</p>
+                            </div>
+                        </div>
+                        <input type="checkbox" data-forester-id="${forester.id}" class="h-5 w-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500" checked>
+                    </div>
+                `;
+            }).join('');
+    } else {
+        foresterListContainer.innerHTML = `<p class="text-center text-gray-500 p-4">No foresters found who service this property's location.</p>`;
+    }
+}
+
+async function handleSendCruiseInquiry(event) {
+    const button = event.target;
+    button.disabled = true;
+    button.textContent = 'Sending...';
+
+    const modal = document.getElementById('invite-forester-modal');
+    const propertyId = modal.dataset.propertyId;
+    const property = allProperties.find(p => p.id === propertyId);
+    
+    const selectedForesterIds = Array.from(document.querySelectorAll('#forester-invite-list input:checked'))
+        .map(checkbox => checkbox.dataset.foresterId);
+
+    const services = Array.from(document.querySelectorAll('#forester-service-checkboxes input:checked')).map(cb => cb.value);
+
+    if (selectedForesterIds.length === 0) {
+        alert("Please select at least one forester to send an inquiry to.");
+        button.disabled = false;
+        button.textContent = 'Send Inquiry';
+        return;
+    }
+
+    if (services.length === 0) {
+        alert("Please select at least one service you are interested in.");
+        button.disabled = false;
+        button.textContent = 'Send Inquiry';
+        return;
+    }
+
+    const message = `A landowner is requesting professional services for the property "${property.name}". They have indicated interest in the following: ${services.join(', ')}.`;
+
+    const inquiryPromises = selectedForesterIds.map(foresterId => {
+        const inquiryData = {
+            fromUserId: currentUser.uid,
+            fromUserName: currentUser.username,
+            toUserId: foresterId,
+            propertyId: property.id,
+            propertyName: property.name,
+            propertyCity: property.city || 'N/A',
+            propertyAcres: property.acreage,
+            servicesRequested: services,
+            message: message,
+        };
+        return sendCruiseInquiry(db, inquiryData);
+    });
+
+    try {
+        await Promise.all(inquiryPromises);
+        closeModal('invite-forester-modal');
+        alert(`Your inquiry has been sent to ${selectedForesterIds.length} forester(s). They will respond to you shortly.`);
+    } catch (error) {
+        console.error("Error sending inquiries:", error);
+        alert("There was an error sending your inquiries. Please try again.");
+    } finally {
+        button.disabled = false;
+        button.textContent = 'Send Inquiry';
+    }
+}
+
 async function openTimberSaleForm(propertyId) {
     const property = allProperties.find(p => p.id === propertyId);
     if (!property) {
@@ -928,9 +1204,24 @@ async function openTimberSaleForm(propertyId) {
     const form = document.getElementById('timber-sale-form');
     form.reset();
     document.getElementById('timber-sale-property-id').value = propertyId;
-    initTimberSaleMap(property.geoJSON, null);
+
+    const timberSaleMap = initTimberSaleMap(sanitizeGeoJSON(property.geoJSON), null);
+    
     setupInventoryTable();
     openModal('timber-sale-form-modal');
+
+    setTimeout(() => {
+        if (timberSaleMap) {
+            timberSaleMap.invalidateSize();
+            const geoJSONObject = sanitizeGeoJSON(property.geoJSON);
+            if (geoJSONObject?.geometry?.coordinates) {
+                const propertyBounds = L.geoJSON(geoJSONObject).getBounds();
+                if (propertyBounds.isValid()) {
+                    timberSaleMap.fitBounds(propertyBounds, { padding: [20, 20] });
+                }
+            }
+        }
+    }, 100); 
 }
 
 function setupInventoryTable() {
@@ -939,9 +1230,8 @@ function setupInventoryTable() {
     tableContainer.innerHTML = ''; 
     addInventoryRow(); 
 
-    // Use a single event listener on the container for removing rows
     tableContainer.addEventListener('click', (e) => {
-        if (e.target.classList.contains('remove-inventory-row-btn')) {
+        if (e.target.closest('.remove-inventory-row-btn')) {
             e.target.closest('.inventory-row').remove();
         }
     });
@@ -1261,37 +1551,72 @@ async function handleUpdateProfile(event) {
 }
 
 async function loginAsDemoUser(role) {
-    const uid = `demo-${role}`;
-    let username = `Demo ${role.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}`;
-    const defaultProfileData = {
-        username, email: `${role}@demo.com`, role,
-        createdAt: new Date(), rating: 4.5, reviewCount: 10, completedTransactions: 5,
-        company: `${username} Inc.`, bio: `This is a demo account for a ${role.replace('-', ' ')}.`,
-        profilePictureUrl: '', location: { lat: 34.7465, lng: -92.2896 }, serviceRadius: 100
+    const demoCredentials = {
+        'seller': { email: 'seller@demo.timbx.com', password: 'demopassword' },
+        'buyer': { email: 'buyer@demo.timbx.com', password: 'demopassword' },
+        'forester': { email: 'forester@demo.timbx.com', password: 'demopassword' },
+        'logging-contractor': { email: 'logging-contractor@demo.timbx.com', password: 'demopassword' },
+        'service-provider': { email: 'service-provider@demo.timbx.com', password: 'demopassword' }
     };
-    if (role === 'seller') {
-        delete defaultProfileData.location;
-        delete defaultProfileData.serviceRadius;
-        defaultProfileData.company = '';
-    } else if (role === 'forester') {
-        defaultProfileData.experience = 15;
-        defaultProfileData.specialties = ['Timber Cruising & Appraisal', 'Forest Management Plans'];
-    } else if (role === 'logging-contractor') {
-        defaultProfileData.services = ['Timber Harvesting', 'Log Hauling'];
-    } else if (role === 'service-provider') {
-        defaultProfileData.services = ['Mechanical Site Prep', 'Hand Planting'];
+
+    const credentials = demoCredentials[role];
+    if (!credentials) {
+        alert('Invalid demo role specified.');
+        return;
     }
+
     try {
-        const userDocRef = doc(db, 'users', uid);
-        await setDoc(userDocRef, defaultProfileData, { merge: true });
-        const userDoc = await getDoc(userDocRef);
-        onUserStatusChange({ uid, ...userDoc.data() });
+        const userCredential = await signInWithEmailAndPassword(auth, credentials.email, credentials.password);
+        const user = userCredential.user;
+        
+        let userProfile = await getUserProfile(db, user.uid);
+
+        if (!userProfile) {
+            console.log(`Creating Firestore profile for demo user: ${role}`);
+            let username = `Demo ${role.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}`;
+            const defaultProfileData = {
+                username,
+                email: user.email,
+                role,
+                createdAt: serverTimestamp(),
+                rating: 4.5,
+                reviewCount: 12,
+                completedTransactions: 8,
+                company: `${username} Services`,
+                bio: `This is the persistent demo account for a ${role.replace('-', ' ')}.`,
+                profilePictureUrl: '',
+                location: { lat: 34.7465, lng: -92.2896 },
+                serviceRadius: 100
+            };
+
+            if (role === 'seller') {
+                delete defaultProfileData.location;
+                delete defaultProfileData.serviceRadius;
+                defaultProfileData.company = '';
+            } else if (role === 'forester') {
+                defaultProfileData.experience = 15;
+                defaultProfileData.specialties = ['Timber Cruising & Appraisal', 'Forest Management Plans'];
+            }
+            
+            await setDoc(doc(db, "users", user.uid), { uid: user.uid, ...defaultProfileData });
+        }
+        
+        if (role === 'seller') {
+            window.location.hash = '#properties';
+        } else {
+            window.location.hash = '#my-inquiries';
+        }
+
     } catch (error) {
-        console.error("Could not create/login demo user in Firestore:", error);
-        onUserStatusChange({ uid, ...defaultProfileData });
+        console.error(`Demo login for ${role} failed:`, error);
+        if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
+            alert(`The demo account for '${role}' has not been set up in Firebase Authentication. Please go to the Authentication -> Users tab in your Firebase Console and create it with the specified email and password.`);
+        } else {
+            alert('An error occurred during demo login. Please check the console.');
+        }
     }
-    window.location.hash = '#my-profile';
 }
+
 
 // --- Haul Tickets ---
 function initializeLogLoadForm() {

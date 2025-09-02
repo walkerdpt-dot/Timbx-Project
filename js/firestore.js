@@ -72,19 +72,18 @@ export async function saveNewProperty(db, currentUser, geoJSON, propertyData) {
     const propertyPayload = {
         ...propertyData,
         ownerId: currentUser.uid,
-        geoJSON: JSON.stringify(geoJSON), // Store GeoJSON as a string
+        geoJSON: JSON.stringify(geoJSON),
         createdAt: serverTimestamp()
     };
     const docRef = await addDoc(collection(db, "properties"), propertyPayload);
-    return { id: docRef.id, ...propertyPayload, geoJSON: geoJSON }; // Return with geoJSON as object
+    return { id: docRef.id, ...propertyPayload, geoJSON: geoJSON };
 }
 
-// THIS IS THE NEW FUNCTION
 export async function saveNewProject(db, projectData) {
     if (!projectData.ownerId) {
         throw new Error("Cannot save project without an owner.");
     }
-    // Ensure GeoJSON objects are stored as strings for Firestore compatibility
+    
     const payload = { ...projectData };
     if (payload.geoJSON && typeof payload.geoJSON === 'object') {
         payload.geoJSON = JSON.stringify(payload.geoJSON);
@@ -94,7 +93,7 @@ export async function saveNewProject(db, projectData) {
     }
 
     const docRef = await addDoc(collection(db, "projects"), payload);
-    return { id: docRef.id, ...projectData }; // Return the original data with the new ID
+    return { id: docRef.id, ...projectData };
 }
 
 export async function updateProperty(db, propertyId, geoJSON, propertyData) {
@@ -123,7 +122,6 @@ export async function getPropertyById(db, propertyId) {
     const docSnap = await getDoc(propertyRef);
     if (docSnap.exists()) {
         const data = docSnap.data();
-        // Parse GeoJSON string back to an object when fetching
         if (data.geoJSON && typeof data.geoJSON === 'string') {
             data.geoJSON = JSON.parse(data.geoJSON);
         }
@@ -160,4 +158,23 @@ export function getMarketplaceDataFromSession() {
     const properties = JSON.parse(sessionStorage.getItem('allProperties'));
     const profiles = JSON.parse(sessionStorage.getItem('allProfessionalProfiles'));
     return [properties, profiles];
+}
+
+export async function sendCruiseInquiry(db, inquiryData) {
+    await addDoc(collection(db, "inquiries"), {
+        ...inquiryData,
+        status: 'pending',
+        createdAt: serverTimestamp()
+    });
+}
+
+export async function fetchInquiriesForUser(db, userId) {
+    const inquiriesRef = collection(db, "inquiries");
+    const q = query(inquiriesRef, where("toUserId", "==", userId));
+    const querySnapshot = await getDocs(q);
+    const inquiries = [];
+    querySnapshot.forEach((doc) => {
+        inquiries.push({ id: doc.id, ...doc.data() });
+    });
+    return inquiries;
 }

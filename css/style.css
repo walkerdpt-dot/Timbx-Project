@@ -193,3 +193,15 @@ body {
   padding-top: 0.25rem;
   padding-bottom: 0.25rem;
 }
+
+.more-options-container {
+    position: relative;
+}
+
+.more-options-dropdown {
+    position: absolute;
+    right: 0;
+    top: 100%;
+    margin-top: 0.5rem;
+    z-index: 10;
+}

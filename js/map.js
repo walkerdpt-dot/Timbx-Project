@@ -218,22 +218,14 @@ export function initProjectAnnotationMap(propertyGeoJSON, existingAnnotations) {
     }
 }
 
-// NEW FUNCTION FOR THE TIMBER SALE MAP
 export function initTimberSaleMap(propertyGeoJSON, existingAnnotations) {
     const map = createBaseMap('timber-sale-map', {}, [34.7465, -92.2896, 10]);
-    if (!map) return;
+    if (!map) return null;
 
     if (propertyGeoJSON?.geometry?.coordinates) {
-        const propertyLayer = L.geoJSON(propertyGeoJSON, {
+        L.geoJSON(propertyGeoJSON, {
             style: { color: '#059669', weight: 2, dashArray: '5, 5', fillOpacity: 0.05, clickable: false }
         }).addTo(map);
-        
-        requestAnimationFrame(() => {
-            if (map && propertyLayer.getBounds().isValid()) {
-                map.invalidateSize();
-                map.fitBounds(propertyLayer.getBounds());
-            }
-        });
     }
 
     projectAnnotationLayers = new L.FeatureGroup().addTo(map);
@@ -251,11 +243,10 @@ export function initTimberSaleMap(propertyGeoJSON, existingAnnotations) {
             featureGroup: projectAnnotationLayers 
         },
         draw: {
-            // Enable Polygon for harvest area, plus lines and markers
             polygon: {
                 allowIntersection: false,
                 showArea: true,
-                shapeOptions: { color: '#e74c3c', weight: 3 } // Red for harvest area
+                shapeOptions: { color: '#e74c3c', weight: 3 }
             },
             rectangle: false,
             circle: false,
@@ -270,6 +261,8 @@ export function initTimberSaleMap(propertyGeoJSON, existingAnnotations) {
     map.on(L.Draw.Event.CREATED, (event) => {
         projectAnnotationLayers.addLayer(event.layer);
     });
+    
+    return map; 
 }
 
 export function initProfileDisplayMap(containerId, user) {

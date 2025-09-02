@@ -24,6 +24,7 @@
       <a href="#home" class="text-white hover:bg-green-600 px-3 py-2 rounded-md font-bold transition duration-200">Home</a>
       <a href="#marketplace" class="text-white hover:bg-green-600 px-3 py-2 rounded-md font-bold transition duration-200">Marketplace</a>
       <a href="#properties" class="text-white hover:bg-green-600 px-3 py-2 rounded-md font-bold transition duration-200">My Properties</a>
+      <a href="#my-inquiries" class="text-white hover:bg-green-600 px-3 py-2 rounded-md font-bold transition duration-200">My Inquiries</a>
       <a href="#haul-tickets" class="text-white hover:bg-green-600 px-3 py-2 rounded-md font-bold transition duration-200">Haul Tickets</a>
       <a href="#my-loads" class="text-white hover:bg-green-600 px-3 py-2 rounded-md font-bold transition duration-200">My Loads</a>
       <a href="#my-projects" class="text-white hover:bg-green-600 px-3 py-2 rounded-md font-bold transition duration-200">My Projects</a>
@@ -113,6 +114,15 @@
                 </div>
             </div>
         </div>
+    </section>
+
+    <section id="my-inquiries" class="main-section hidden p-6 bg-white rounded-lg shadow-md mb-6">
+        <h2 class="text-3xl font-semibold text-green-700 mb-4">My Inquiries</h2>
+        <div id="inquiries-login-prompt" class="text-center p-6 bg-white rounded-lg shadow-md">
+            <p>Please log in as a professional to view your inquiries.</p>
+        </div>
+        <div id="inquiries-main-content" class="hidden space-y-4">
+            </div>
     </section>
 
     <section id="haul-tickets" class="main-section hidden p-6 bg-white rounded-lg shadow-md mb-6 max-w-2xl mx-auto">
@@ -232,6 +242,9 @@
         </a>
         <a href="#properties" id="back-to-properties-btn" class="hidden bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded">
           &larr; Back to My Properties
+        </a>
+        <a href="#my-inquiries" id="back-to-my-inquiries-btn" class="hidden bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded">
+          &larr; Back to My Inquiries
         </a>
       </div>
       <div id="detail-view-content">
@@ -446,7 +459,7 @@
     
     <div id="service-select-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="service-select-modal-title">
       <div class="modal-content">
-        <span id="close-service-select-modal" class="close-button" aria-label="Close Service Selection dialog">&times;</span>
+        <span id="close-service-select-modal" class="close-button close-modal-btn" aria-label="Close Service Selection dialog">&times;</span>
         <h2 id="service-select-modal-title" class="text-2xl font-bold mb-4 text-green-700">Seek Services For: <span id="service-modal-property-name" class="text-yellow-600"></span></h2>
         <p class="text-gray-700 mb-6">Select a category below to create a new project for this property.</p>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -472,7 +485,7 @@
 
     <div id="forester-first-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="forester-first-modal-title">
       <div class="modal-content max-w-lg">
-        <span id="close-forester-first-modal" class="close-button" aria-label="Close dialog">&times;</span>
+        <span id="close-forester-first-modal" class="close-button close-modal-btn" aria-label="Close dialog">&times;</span>
         <h2 id="forester-first-modal-title" class="text-2xl font-bold mb-4 text-green-700">Maximize Your Timber Sale Value</h2>
         <p class="text-gray-700 mb-4">
           A professional timber cruise is the most critical step to ensure you get the best price. It provides accurate volume data that gives buyers the confidence to bid higher.
@@ -618,10 +631,10 @@
                 </select>
             </div>
             <div class="col-span-3">
-                <input type="number" class="inventory-volume w-full p-2 border-gray-300 rounded-md shadow-sm" placeholder="Volume">
+                <input type="number" class="inventory-volume w-full p-2 border border-gray-300 rounded-md shadow-sm" placeholder="Volume">
             </div>
             <div class="col-span-3">
-                 <select class="inventory-unit w-full p-2 border-gray-300 rounded-md shadow-sm">
+                 <select class="inventory-unit w-full p-2 border border-gray-300 rounded-md shadow-sm">
                     <option>Tons</option>
                     <option>Cords</option>
                     <option>MBF</option>
@@ -685,6 +698,40 @@
           </div>
       </div>
     </div>
+    
+    <div id="invite-forester-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="invite-forester-title">
+        <div class="modal-content max-w-2xl">
+            <span class="close-button close-modal-btn">&times;</span>
+            <h2 id="invite-forester-title" class="text-2xl font-bold mb-2 text-green-700">Request Professional Services</h2>
+            <p class="text-sm text-gray-600 mb-4">For property: <strong id="invite-modal-property-name" class="text-gray-800"></strong></p>
+            
+            <div class="p-3 bg-blue-50 border border-blue-200 rounded-md mb-4">
+               <h4 class="font-semibold text-blue-800">How It Works</h4>
+               <p class="text-sm text-blue-700 mt-1">Select the services you need. An inquiry will be sent to the foresters you choose below, including your property details and a message based on your selections. They will respond with a quote if they are interested.</p>
+           </div>
+
+           <div class="mt-4 border-t pt-4">
+               <label class="block text-sm font-medium text-gray-700 mb-2">I am interested in (select all that apply):</label>
+               <div id="forester-service-checkboxes" class="space-y-2 text-sm">
+                   <div><label class="flex items-center"><input type="checkbox" value="Timber Cruising & Appraisal" class="mr-2 h-4 w-4 rounded">A Timber Cruise and Value Appraisal</label></div>
+                   <div><label class="flex items-center"><input type="checkbox" value="Harvest Management" class="mr-2 h-4 w-4 rounded">Full Harvest Management (Sale administration)</label></div>
+                   <div><label class="flex items-center"><input type="checkbox" value="General Consultation" class="mr-2 h-4 w-4 rounded">General Consultation about my property</label></div>
+               </div>
+           </div>
+
+            <div class="mt-4 border-t pt-4">
+              <h3 class="font-semibold text-gray-800 mb-2">Nearby Foresters</h3>
+              <div id="forester-invite-list" class="space-y-3 max-h-60 overflow-y-auto border rounded-md p-2">
+                </div>
+            </div>
+            
+            <div class="mt-6 flex justify-end space-x-3">
+                <button type="button" class="bg-gray-200 hover:bg-gray-300 text-gray-800 px-4 py-2 rounded-md font-bold transition close-modal-btn">Cancel</button>
+                <button id="send-invites-btn" type="button" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md font-bold transition">Send Inquiry</button>
+            </div>
+        </div>
+    </div>
+
   </div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
