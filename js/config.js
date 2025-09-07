@@ -1,6 +1,6 @@
 // js/config.js
 
-// Your web app's Firebase configuration
+// Make sure the word "export" is at the start of this line
 export const firebaseConfig = {
   apiKey: "AIzaSyA-3oHfOvtZTC6xk424zM9PgoXTCeFVIOo",
   authDomain: "timbx-e36c8.firebaseapp.com",

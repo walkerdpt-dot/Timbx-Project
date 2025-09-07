@@ -7,31 +7,63 @@ body {
     color: #1f2937; /* Dark gray for text */
 }
 
-.hidden-section {
+/* =================================================================== */
+/* Navigation Bar Layout - FINAL VERSION                               */
+/* =================================================================== */
+
+.nav-container {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center; /* This will center the .nav-links child */
+    height: 40px; 
+}
+
+.nav-links {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    white-space: nowrap; /* Prevents links from wrapping */
+}
+
+.nav-auth {
+    position: absolute; /* Decouples the auth block from the links */
+    right: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    display: flex;
+    align-items: center;
+}
+
+/* This creates an invisible placeholder on the left to balance the nav-auth block */
+.nav-left-placeholder {
+    width: 300px; /* Adjust this width if needed */
+    flex-shrink: 0;
+}
+
+/* This rule properly hides the user display when logged out */
+#user-display.hidden {
     display: none;
 }
+
 
 /* =================================================================== */
 /* Map Container Styles                                                */
 /* =================================================================== */
 
-/* Default height for most map containers */
 #global-map, #forester-signup-map, #buyer-signup-map, #contractor-signup-map, #edit-profile-map, #profile-map-display, #my-properties-map {
     height: 600px;
 }
 
-/* Specific smaller height for the property form map */
 #property-map {
     height: 400px;
 }
 
-/* Shared styles for ALL map containers to avoid duplication */
 #global-map, #property-map, #forester-signup-map, #buyer-signup-map, #contractor-signup-map, #edit-profile-map, #profile-map-display, #my-properties-map {
     border-radius: 0.5rem;
     border: 1px solid #d1d5db;
 }
 
-/* NEW/FIX: Ensures Leaflet map correctly fills its container */
 .leaflet-container {
     width: 100%;
     height: 100%;
@@ -42,7 +74,6 @@ body {
 /* Modal & Overlay Styles                                              */
 /* =================================================================== */
 
-/* Combined styles for both standard and full-page modal backgrounds */
 .modal-overlay,
 .full-page-section {
     position: fixed;
@@ -57,13 +88,11 @@ body {
     z-index: 1000;
 }
 
-/* Specific styles for the full-page variant */
 .full-page-section {
     overflow-y: auto;
     padding: 2rem 0;
 }
 
-/* Default modal content box */
 .modal-content {
     background: white;
     padding: 2rem;
@@ -76,7 +105,6 @@ body {
     box-shadow: 0 10px 25px rgba(0,0,0,0.1);
 }
 
-/* Wider content box for full-page modals */
 .full-page-section .modal-content {
     max-width: 900px;
 }
@@ -112,7 +140,7 @@ body {
     position: absolute;
     top: 10px;
     left: 10px;
-    z-index: 401; /* Must be higher than map panes (400) */
+    z-index: 401;
     background: white;
     border-radius: 4px;
     box-shadow: 0 1px 5px rgba(0,0,0,0.65);
@@ -155,9 +183,8 @@ body {
 /* Leaflet.Draw Plugin Overrides                                       */
 /* =================================================================== */
 
-/* This targets the small squares at each vertex while editing */
 .leaflet-editing-icon {
-  background-color: #ff4136 !important; /* A bright red */
+  background-color: #ff4136 !important;
   width: 8px !important;
   height: 8px !important;
   margin-left: -4px !important;
@@ -165,7 +192,6 @@ body {
   border-radius: 1px;
 }
 
-/* This targets the larger square that appears in the middle of a line segment */
 .leaflet-vertex-icon.leaflet-vertex-icon-middle {
     background-color: #ff4136 !important;
     opacity: 0.7;
@@ -175,21 +201,21 @@ body {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 0.5rem; /* 8px */
+  gap: 0.5rem;
 }
 
 .filter-group-label {
   display: flex;
   align-items: center;
   font-weight: 500;
-  color: #374151; /* gray-700 */
+  color: #374151;
 }
 
 .filter-group-select {
   width: 100%;
-  font-size: 0.875rem; /* text-sm */
-  border-radius: 0.375rem; /* rounded-md */
-  border-color: #D1D5DB; /* gray-300 */
+  font-size: 0.875rem;
+  border-radius: 0.375rem;
+  border-color: #D1D5DB;
   padding-top: 0.25rem;
   padding-bottom: 0.25rem;
 }
@@ -204,4 +230,9 @@ body {
     top: 100%;
     margin-top: 0.5rem;
     z-index: 10;
+}
+
+main.container {
+  position: relative;
+  z-index: 10;
 }

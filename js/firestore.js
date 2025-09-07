@@ -1,7 +1,7 @@
 // js/firestore.js
 import { 
     getFirestore, doc, getDoc, setDoc, updateDoc, collection, getDocs, 
-    addDoc, deleteDoc, query, where, serverTimestamp 
+    addDoc, deleteDoc, query, where, serverTimestamp, writeBatch
 } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
 
 export async function createUserProfile(db, user, username, role, optionalData) {
@@ -55,7 +55,7 @@ export async function fetchProjects(db) {
 
 export async function fetchProfessionalProfiles(db) {
     const usersRef = collection(db, "users");
-    const q = query(usersRef, where("role", "!=", "seller"));
+    const q = query(usersRef, where("role", "!=", "landowner"));
     const querySnapshot = await getDocs(q);
     const profiles = [];
     querySnapshot.forEach((doc) => {
@@ -64,9 +64,8 @@ export async function fetchProfessionalProfiles(db) {
     return profiles;
 }
 
-
 export async function saveNewProperty(db, currentUser, geoJSON, propertyData) {
-    if (!currentUser) {
+    if (!currentUser || !currentUser.uid) {
         throw new Error("You must be logged in to save a property.");
     }
     const propertyPayload = {
@@ -78,6 +77,26 @@ export async function saveNewProperty(db, currentUser, geoJSON, propertyData) {
     const docRef = await addDoc(collection(db, "properties"), propertyPayload);
     return { id: docRef.id, ...propertyPayload, geoJSON: geoJSON };
 }
+
+export async function saveTimberSale(db, saleData) {
+    if (!saleData.ownerId) {
+        throw new Error("Cannot save sale without an owner.");
+    }
+    
+    if (saleData.saleMapGeoJSON && typeof saleData.saleMapGeoJSON === 'object') {
+        saleData.saleMapGeoJSON = JSON.stringify(saleData.saleMapGeoJSON);
+    }
+
+    const payload = {
+        ...saleData,
+        createdAt: serverTimestamp(),
+        status: 'open'
+    };
+
+    const docRef = await addDoc(collection(db, "timberSales"), payload);
+    return { id: docRef.id, ...payload };
+}
+
 
 export async function saveNewProject(db, projectData) {
     if (!projectData.ownerId) {
@@ -96,6 +115,34 @@ export async function saveNewProject(db, projectData) {
     return { id: docRef.id, ...projectData };
 }
 
+export async function createOrGetInquiryProject(db, currentUser, property, services) {
+    const projectsRef = collection(db, 'projects');
+    const q = query(projectsRef, 
+        where("propertyId", "==", property.id), 
+        where("status", "==", "inquiry")
+    );
+
+    const querySnapshot = await getDocs(q);
+    if (!querySnapshot.empty) {
+        const existingProjectDoc = querySnapshot.docs[0];
+        return { id: existingProjectDoc.id, ...existingProjectDoc.data() };
+    }
+
+    const projectData = {
+        ownerId: currentUser.uid,
+        ownerName: currentUser.username,
+        propertyId: property.id,
+        propertyName: property.name,
+        status: 'inquiry',
+        servicesSought: services,
+        createdAt: serverTimestamp(),
+        geoJSON: property.geoJSON
+    };
+
+    const docRef = await addDoc(collection(db, "projects"), projectData);
+    return { id: docRef.id, ...projectData };
+}
+
 export async function updateProperty(db, propertyId, geoJSON, propertyData) {
     const propertyRef = doc(db, "properties", propertyId);
     await updateDoc(propertyRef, {
@@ -111,10 +158,6 @@ export async function updateProject(db, projectId, projectData) {
 
 export async function deleteProperty(db, propertyId) {
     await deleteDoc(doc(db, "properties", propertyId));
-}
-
-export async function deleteProject(db, projectId) {
-    await deleteDoc(doc(db, "projects", projectId));
 }
 
 export async function getPropertyById(db, propertyId) {
@@ -149,32 +192,49 @@ export async function updateUserProfile(db, uid, updatedData) {
     await updateDoc(userRef, updatedData);
 }
 
-export function saveMarketplaceDataToSession(properties, profiles) {
-    sessionStorage.setItem('allProperties', JSON.stringify(properties));
-    sessionStorage.setItem('allProfessionalProfiles', JSON.stringify(profiles));
-}
-
-export function getMarketplaceDataFromSession() {
-    const properties = JSON.parse(sessionStorage.getItem('allProperties'));
-    const profiles = JSON.parse(sessionStorage.getItem('allProfessionalProfiles'));
-    return [properties, profiles];
-}
-
-export async function sendCruiseInquiry(db, inquiryData) {
-    await addDoc(collection(db, "inquiries"), {
-        ...inquiryData,
-        status: 'pending',
-        createdAt: serverTimestamp()
+export async function sendCruiseInquiries(db, inquiriesData) {
+    const inquiriesRef = collection(db, "inquiries");
+    
+    const promises = inquiriesData.map(inquiry => {
+        const payload = {
+            ...inquiry,
+            status: 'pending',
+            createdAt: serverTimestamp()
+        };
+        return addDoc(inquiriesRef, payload);
     });
+
+    await Promise.all(promises);
 }
+
 
 export async function fetchInquiriesForUser(db, userId) {
+    if (!userId) return [];
     const inquiriesRef = collection(db, "inquiries");
-    const q = query(inquiriesRef, where("toUserId", "==", userId));
+    const q = query(inquiriesRef, where("involvedUsers", "array-contains", userId));
     const querySnapshot = await getDocs(q);
     const inquiries = [];
     querySnapshot.forEach((doc) => {
         inquiries.push({ id: doc.id, ...doc.data() });
     });
     return inquiries;
+}
+
+export async function fetchQuotesForProject(db, projectIds, landownerId) {
+    if (!projectIds || projectIds.length === 0 ||!landownerId) return [];
+    const quotesRef = collection(db, "quotes");
+    const q = query(quotesRef, where("projectId", "in", projectIds), where("landownerId", "==", landownerId));
+    const querySnapshot = await getDocs(q);
+    const quotes = [];
+    querySnapshot.forEach((doc) => {
+        quotes.push({ id: doc.id, ...doc.data() });
+    });
+    return quotes;
+}
+
+export async function updateInquiryStatus(db, inquiryId, newStatus) {
+    const inquiryRef = doc(db, "inquiries", inquiryId);
+    await updateDoc(inquiryRef, {
+        status: newStatus
+    });
 }

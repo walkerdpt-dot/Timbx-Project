@@ -1,27 +1,20 @@
 // js/auth.js
 import { 
     getAuth, 
+    onAuthStateChanged, 
     createUserWithEmailAndPassword, 
     signInWithEmailAndPassword, 
-    signOut,
-    onAuthStateChanged
+    signOut 
 } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
-import { doc, setDoc, getDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
-import { getUpdatedLocation } from './map.js';
-
-let auth;
+import { createUserProfile, getUserProfile } from './firestore.js';
 
 export function initializeAuth(app, db, onUserStatusChange) {
-    auth = getAuth(app);
+    const auth = getAuth(app);
 
     onAuthStateChanged(auth, async (user) => {
         if (user) {
-            const userDoc = await getDoc(doc(db, "users", user.uid));
-            if (userDoc.exists()) {
-                onUserStatusChange({ uid: user.uid, ...userDoc.data() });
-            } else {
-                onUserStatusChange(user);
-            }
+            const userProfile = await getUserProfile(db, user.uid);
+            onUserStatusChange(userProfile);
         } else {
             onUserStatusChange(null);
         }
@@ -38,24 +31,22 @@ export async function handleLogin(auth) {
     try {
         await signInWithEmailAndPassword(auth, email, password);
         messageDiv.classList.add('hidden');
+        messageDiv.textContent = '';
         return true;
     } catch (error) {
+        console.error("Login failed:", error);
         messageDiv.textContent = error.message;
         messageDiv.classList.remove('hidden');
         return false;
     }
 }
 
-export async function handleSignup(auth, db) {
+export async function handleSignup(auth, db, optionalData) {
     const email = document.getElementById('signup-email').value;
     const password = document.getElementById('signup-password').value;
     const username = document.getElementById('signup-username').value;
     const role = document.getElementById('signup-role').value;
     const messageDiv = document.getElementById('signup-message');
-
-    const company = document.getElementById('signup-company').value.trim();
-    const bio = document.getElementById('signup-bio').value.trim();
-    const profilePictureUrl = document.getElementById('signup-profile-picture-url').value.trim();
 
     if (!role) {
         messageDiv.textContent = "Please select a role.";
@@ -66,36 +57,27 @@ export async function handleSignup(auth, db) {
     try {
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
         const user = userCredential.user;
-
-        const newUserProfile = {
-            username: username,
-            email: user.email,
-            role: role,
-            createdAt: serverTimestamp(),
-            company: company || "",
-            bio: bio || "",
-            profilePictureUrl: profilePictureUrl || "",
-            rating: 0,
-            reviewCount: 0,
-            completedTransactions: 0
-        };
-
-        if (role === 'forester' || role === 'buyer' || role === 'contractor') {
-            newUserProfile.location = getUpdatedLocation();
-        }
-
-        await setDoc(doc(db, "users", user.uid), newUserProfile);
+        
+        await createUserProfile(db, user, username, role, optionalData);
+        
         messageDiv.classList.add('hidden');
-        await signOut(auth);
+        messageDiv.textContent = '';
+        alert("Signup successful! Please log in.");
         return true;
+
     } catch (error) {
+        console.error("Signup failed:", error);
         messageDiv.textContent = error.message;
         messageDiv.classList.remove('hidden');
         return false;
     }
 }
 
-
 export async function handleLogout(auth) {
-    await signOut(auth);
+    try {
+        await signOut(auth);
+    } catch (error) {
+        console.error("Logout failed:", error);
+        alert("Failed to log out. Please try again.");
+    }
 }

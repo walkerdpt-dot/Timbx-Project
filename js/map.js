@@ -1,19 +1,11 @@
 // js/map.js
+export const mapInstances = new Map();
+let lastDrawnLayer;
+let saleMapFeatures = []; // Stores features {layer, type, label} for the sale map
+export let myPropertiesLayerGroup = null; // Layer group for property pins
+let locationMarker = null; // Shared marker for signup and edit profile
+let serviceAreaCircle = null; // Shared circle for edit profile
 
-// Map instances are stored in a Map object for easier management.
-const mapInstances = new Map();
-let drawnItems, lastDrawnLayer, locationMarker, serviceAreaCircle;
-
-// This global variable will hold the features drawn on the project map
-let projectAnnotationLayers = null;
-
-/**
- * Creates a standard Leaflet map with common controls.
- * @param {string} containerId The ID of the HTML element for the map.
- * @param {object} mapOptions Options to pass to the L.map constructor.
- * @param {Array} view An array of [lat, lng, zoom] for the initial view.
- * @returns {L.Map | null} The created Leaflet map instance or null if container not found.
- */
 function createBaseMap(containerId, mapOptions = {}, view = [34.7465, -92.2896, 7]) {
     if (mapInstances.has(containerId)) {
         const oldMap = mapInstances.get(containerId);
@@ -25,7 +17,7 @@ function createBaseMap(containerId, mapOptions = {}, view = [34.7465, -92.2896, 
         console.error(`Map container with ID "${containerId}" not found.`);
         return null;
     }
-    mapContainer.innerHTML = ''; // Clear container to prevent issues
+    mapContainer.innerHTML = '';
 
     const map = L.map(containerId, mapOptions).setView(view.slice(0, 2), view[2]);
     addLayerControls(map);
@@ -48,47 +40,48 @@ export function addLayerControls(map) {
     ]);
     
     const baseMaps = { "Hybrid": hybridGroup, "Streets": streets, "Satellite": satellite };
-    hybridGroup.addTo(map);
+    hybridGroup.addTo(map); // Set Hybrid as the default
     L.control.layers(baseMaps, null, { position: 'topright' }).addTo(map);
 }
 
-export function createGeocoder(map) {
-    const geocoderContainer = document.getElementById('geocoder-container');
-    geocoderContainer.innerHTML = '';
-    
-    L.Control.geocoder({
-        defaultMarkGeocode: false,
-        collapsed: false,
-        placeholder: 'Search for a location...',
-    }).on('markgeocode', function(e) {
-        map.fitBounds(e.geocode.bbox);
-        document.getElementById('map-search-modal').classList.add('hidden');
-    }).addTo(geocoderContainer);
+
+export function getMapInstance(mapId) {
+    return mapInstances.get(mapId) || null;
 }
 
 export function initGlobalMap() {
-    return createBaseMap('global-map');
+    const map = createBaseMap('global-map');
+    if (map) {
+        L.Control.geocoder({
+            defaultMarkGeocode: false,
+            position: 'topleft',
+            placeholder: 'Search for a location...'
+        }).on('markgeocode', function(e) {
+            map.fitBounds(e.geocode.bbox);
+        }).addTo(map);
+    }
+    return map;
 }
 
 export function initMyPropertiesMap() {
-    return createBaseMap('my-properties-map');
+    const map = createBaseMap('my-properties-map');
+    if (map) {
+        myPropertiesLayerGroup = L.featureGroup().addTo(map);
+    }
+    return map;
 }
 
 export function initPropertyFormMap(existingGeoJSON) {
     const map = createBaseMap('property-map', {}, [34.7465, -92.2896, 10]);
     if (!map) return;
     
-    drawnItems = new L.FeatureGroup().addTo(map);
+    const drawnItems = new L.FeatureGroup().addTo(map);
 
     if (existingGeoJSON?.geometry?.coordinates) {
-        const existingLayer = L.geoJSON(existingGeoJSON).addTo(drawnItems);
-        lastDrawnLayer = existingLayer.getLayers()[0];
-        requestAnimationFrame(() => {
-            if (map && existingLayer.getBounds().isValid()) {
-                 map.invalidateSize();
-                 map.fitBounds(existingLayer.getBounds());
-            }
-        });
+        const existingLayer = L.geoJSON(existingGeoJSON);
+        drawnItems.addLayer(existingLayer.getLayers()[0]);
+        lastDrawnLayer = drawnItems.getLayers()[0];
+        map.fitBounds(existingLayer.getBounds(), { padding: [50, 50] });
         calculateAndDisplayAcreage(lastDrawnLayer);
     }
 
@@ -110,8 +103,6 @@ export function initPropertyFormMap(existingGeoJSON) {
         lastDrawnLayer = null;
         calculateAndDisplayAcreage(null);
     });
-
-    requestAnimationFrame(() => map.invalidateSize());
 }
 
 function calculateAndDisplayAcreage(layer) {
@@ -133,191 +124,149 @@ export function getLastDrawnGeoJSON() {
 }
 
 export function getProjectAnnotationsAsGeoJSON() {
-    if (projectAnnotationLayers) {
-        return projectAnnotationLayers.toGeoJSON();
-    }
-    return null;
+    if (saleMapFeatures.length === 0) return null;
+    
+    const features = saleMapFeatures.map(item => {
+        const feature = item.layer.toGeoJSON();
+        feature.properties = {
+            label: item.label,
+            type: item.type
+        };
+        return feature;
+    });
+
+    return {
+        type: "FeatureCollection",
+        features: features
+    };
 }
 
-export function initProjectAnnotationMap(propertyGeoJSON, existingAnnotations) {
-    const map = createBaseMap('project-map', {}, [34.7465, -92.2896, 10]);
-    if (!map) return;
+export function initTimberSaleMap(propertyGeoJSON) {
+    const map = createBaseMap('timber-sale-map');
+    if (!map) return null;
+
+    saleMapFeatures = []; 
 
     if (propertyGeoJSON?.geometry?.coordinates) {
         const propertyLayer = L.geoJSON(propertyGeoJSON, {
-            style: { color: '#059669', weight: 3, fillOpacity: 0.1, clickable: false }
+            style: { color: 'green', weight: 3, fillOpacity: 0.1, dashArray: '5, 5', clickable: false }
         }).addTo(map);
         
-        requestAnimationFrame(() => {
-            if (map && propertyLayer.getBounds().isValid()) {
-                map.invalidateSize();
-                map.fitBounds(propertyLayer.getBounds());
-            }
-        });
+        if (propertyLayer.getBounds().isValid()) {
+            map.fitBounds(propertyLayer.getBounds(), { padding: [50, 50] });
+        }
     }
 
-    projectAnnotationLayers = new L.FeatureGroup().addTo(map);
-
-    if (existingAnnotations) {
-        L.geoJSON(existingAnnotations, {
-            onEachFeature: (feature, layer) => {
-                projectAnnotationLayers.addLayer(layer);
-            }
-        });
-    }
-    updateAnnotationsList();
+    const drawnItems = new L.FeatureGroup().addTo(map);
 
     const drawControl = new L.Control.Draw({
-        edit: { 
-            featureGroup: projectAnnotationLayers 
-        },
+        edit: { featureGroup: drawnItems },
         draw: {
-            polygon: false,
-            rectangle: false,
+            polygon: { shapeOptions: { color: '#007bff' } },      // Harvest Area - Blue
+            rectangle: { shapeOptions: { color: '#ffc107' } },    // SMZ - Yellow
+            polyline: { shapeOptions: { color: '#6c757d' } },     // Road - Grey
+            marker: {},
             circle: false,
-            circlemarker: false,
-            polyline: {
-                shapeOptions: { color: '#f39c12', weight: 4 }
-            },
-            marker: {}
+            circlemarker: false
         }
     }).addTo(map);
 
     map.on(L.Draw.Event.CREATED, (event) => {
-        projectAnnotationLayers.addLayer(event.layer);
-        updateAnnotationsList();
+        const layer = event.layer;
+        const type = event.layerType;
+        
+        let featureType = 'Feature';
+        if (type === 'polygon') featureType = 'Harvest Area';
+        if (type === 'rectangle') featureType = 'SMZ';
+        if (type === 'polyline') featureType = 'Road';
+        if (type === 'marker') featureType = 'Point of Interest';
+
+        const label = prompt(`Enter a label for this new ${featureType}:`);
+        
+        if (label) {
+            layer.bindTooltip(label, { permanent: true, direction: 'center', className: 'map-label' }).openTooltip();
+            drawnItems.addLayer(layer);
+            saleMapFeatures.push({ layer, type: featureType, label });
+
+            if (featureType === 'Harvest Area' || featureType === 'SMZ') {
+                updateInventoryStandDropdowns();
+            }
+        }
     });
 
-    map.on(L.Draw.Event.EDITED, () => updateAnnotationsList());
-    map.on(L.Draw.Event.DELETED, () => updateAnnotationsList());
-
-    function updateAnnotationsList() {
-        const listContainer = document.getElementById('map-annotations-list');
-        if (!listContainer) return;
-
-        const features = [];
-        projectAnnotationLayers.eachLayer(layer => {
-            if (layer instanceof L.Polyline) {
-                let totalLength = 0;
-                const latlngs = layer.getLatLngs();
-                for (let i = 0; i < latlngs.length - 1; i++) {
-                    totalLength += latlngs[i].distanceTo(latlngs[i + 1]);
-                }
-                const lengthInFeet = (totalLength * 3.28084).toFixed(0);
-                features.push(`<li>- Road/Line: <strong>${lengthInFeet.toLocaleString()} ft</strong></li>`);
-            } else if (layer instanceof L.Marker) {
-                features.push('<li>- Point of Interest (Gate, Deck, etc.)</li>');
-            }
+    map.on(L.Draw.Event.DELETED, (event) => {
+        event.layers.eachLayer(layer => {
+            saleMapFeatures = saleMapFeatures.filter(item => item.layer !== layer);
         });
-
-        if (features.length === 0) {
-            listContainer.innerHTML = '<p class="text-gray-500">No specific features drawn yet.</p>';
-        } else {
-            listContainer.innerHTML = `<ul>${features.join('')}</ul>`;
-        }
-    }
-}
-
-export function initTimberSaleMap(propertyGeoJSON, existingAnnotations) {
-    const map = createBaseMap('timber-sale-map', {}, [34.7465, -92.2896, 10]);
-    if (!map) return null;
-
-    if (propertyGeoJSON?.geometry?.coordinates) {
-        L.geoJSON(propertyGeoJSON, {
-            style: { color: '#059669', weight: 2, dashArray: '5, 5', fillOpacity: 0.05, clickable: false }
-        }).addTo(map);
-    }
-
-    projectAnnotationLayers = new L.FeatureGroup().addTo(map);
-
-    if (existingAnnotations) {
-        L.geoJSON(existingAnnotations, {
-            onEachFeature: (feature, layer) => {
-                projectAnnotationLayers.addLayer(layer);
-            }
-        });
-    }
-
-    const drawControl = new L.Control.Draw({
-        edit: { 
-            featureGroup: projectAnnotationLayers 
-        },
-        draw: {
-            polygon: {
-                allowIntersection: false,
-                showArea: true,
-                shapeOptions: { color: '#e74c3c', weight: 3 }
-            },
-            rectangle: false,
-            circle: false,
-            circlemarker: false,
-            polyline: {
-                shapeOptions: { color: '#f39c12', weight: 4 }
-            },
-            marker: {}
-        }
-    }).addTo(map);
-
-    map.on(L.Draw.Event.CREATED, (event) => {
-        projectAnnotationLayers.addLayer(event.layer);
+        updateInventoryStandDropdowns();
     });
-    
-    return map; 
+
+    return map;
 }
 
-export function initProfileDisplayMap(containerId, user) {
-    const mapContainer = document.getElementById(containerId);
-    if (!mapContainer) {
-        console.error(`Profile display map container with ID "${containerId}" not found.`);
-        return;
-    };
-
-    if (!user?.location) {
-        mapContainer.innerHTML = `<div class="p-4 text-center text-gray-500">No location set.</div>`;
-        return;
-    }
+function updateInventoryStandDropdowns() {
+    const harvestAreas = saleMapFeatures
+        .filter(item => item.type === 'Harvest Area' || item.type === 'SMZ')
+        .map(item => item.label);
     
-    const { lat, lng } = user.location;
-    const mapOptions = { dragging: false, touchZoom: false, scrollWheelZoom: false, doubleClickZoom: false, boxZoom: false, keyboard: false, zoomControl: true };
-    const map = createBaseMap(containerId, mapOptions, [lat, lng, 10]);
+    document.querySelectorAll('.inventory-stand-name').forEach(select => {
+        const currentVal = select.value;
+        select.innerHTML = '<option value="">Select Harvest Area</option>';
+        harvestAreas.forEach(areaName => {
+            const option = new Option(areaName, areaName);
+            select.appendChild(option);
+        });
+        select.value = currentVal;
+    });
+}
+
+export function initDetailViewMap(containerId, geoJSON) {
+    const map = createBaseMap(containerId);
     if (!map) return;
-    
-    L.marker([lat, lng]).addTo(map);
-
-    let boundsToFit;
-    if (user.serviceRadius) {
-        const circle = L.circle([lat, lng], {
-            radius: user.serviceRadius * 1609.34, color: 'blue', fillColor: '#3498db', fillOpacity: 0.2
-        }).addTo(map);
-        boundsToFit = circle.getBounds();
-    } else {
-        boundsToFit = L.latLngBounds([L.latLng(lat, lng)]);
+    let bounds;
+    if (geoJSON) {
+        const layer = L.geoJSON(geoJSON).addTo(map);
+        bounds = layer.getBounds();
     }
-
-    requestAnimationFrame(() => {
-        if (map && boundsToFit.isValid()) {
-            map.invalidateSize();
-            map.fitBounds(boundsToFit);
-        }
-    });
+    if (bounds && bounds.isValid()) {
+         map.fitBounds(bounds, { padding: [50, 50] });
+    }
+    setTimeout(() => map.invalidateSize(), 0);
 }
 
-export function initSignupMap(role) {
-    const mapId = `${role}-signup-map`;
+export function initProfileDisplayMap(containerId, userProfile) {
+     const map = createBaseMap(containerId, { dragging: false, scrollWheelZoom: false, doubleClickZoom: false });
+     if (userProfile?.location) {
+        const latLng = [userProfile.location.lat, userProfile.location.lng];
+        map.setView(latLng, 9);
+        L.marker(latLng).addTo(map);
+        if (userProfile.serviceRadius) {
+            L.circle(latLng, { radius: userProfile.serviceRadius * 1609.34, color: '#007bff', fillOpacity: 0.1 }).addTo(map);
+        }
+        setTimeout(() => map.invalidateSize(), 0);
+     }
+}
+
+export function initSignupMap() {
+    const mapId = `signup-map`;
     const map = createBaseMap(mapId, {}, [34.7465, -92.2896, 5]);
     if (!map) return;
 
-    locationMarker = null;
+    locationMarker = null; // Reset the marker for a new signup
     map.on('click', (e) => {
-        locationMarker ? locationMarker.setLatLng(e.latlng) : locationMarker = L.marker(e.latlng).addTo(map);
+        if (locationMarker) {
+            locationMarker.setLatLng(e.latlng);
+        } else {
+            locationMarker = L.marker(e.latlng).addTo(map);
+        }
     });
     setTimeout(() => map.invalidateSize(), 400);
 }
 
-export function initEditProfileMap(user) {
-    const lat = user?.location?.lat || 34.7465;
-    const lng = user?.location?.lng || -92.2896;
-    const radius = user?.serviceRadius || 50;
+export function initEditProfileMap(userProfile) {
+    const lat = userProfile?.location?.lat || 34.7465;
+    const lng = userProfile?.location?.lng || -92.2896;
+    const radius = userProfile?.serviceRadius || 50;
     
     const map = createBaseMap('edit-profile-map', {}, [lat, lng, 7]);
     if (!map) return;
@@ -341,46 +290,4 @@ export function getUpdatedLocation() {
         return { lat, lng };
     }
     return null;
-}
-
-export function getMapInstance(mapId) {
-    return mapInstances.get(mapId) || null;
-}
-
-export function initDetailViewMap(containerId, geoJSON, annotations) {
-    const map = createBaseMap(containerId);
-    if (!map) return;
-
-    let bounds;
-
-    if (geoJSON?.geometry?.coordinates) {
-        const propertyLayer = L.geoJSON(geoJSON, { 
-            style: { color: '#059669', weight: 3, fillOpacity: 0.1, clickable: false } 
-        }).addTo(map);
-        bounds = propertyLayer.getBounds();
-    }
-
-    if (annotations) {
-        const annotationLayer = L.geoJSON(annotations, {
-            style: function (feature) {
-                if (feature.geometry.type === 'LineString') {
-                    return { color: '#f39c12', weight: 4 };
-                }
-                return { color: '#e74c3c' };
-            }
-        }).addTo(map);
-
-        if (!bounds || !bounds.isValid()) {
-            bounds = annotationLayer.getBounds();
-        } else {
-            bounds.extend(annotationLayer.getBounds());
-        }
-    }
-    
-    requestAnimationFrame(() => {
-        if (map && bounds && bounds.isValid()) {
-            map.invalidateSize(); 
-            map.fitBounds(bounds, { padding: [20, 20] });
-        }
-    });
 }
