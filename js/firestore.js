@@ -238,3 +238,73 @@ export async function updateInquiryStatus(db, inquiryId, newStatus) {
         status: newStatus
     });
 }
+
+export async function saveHaulTicket(db, ticketData) {
+    const payload = {
+        ...ticketData,
+        createdAt: serverTimestamp()
+    };
+    const docRef = await addDoc(collection(db, "haulTickets"), payload);
+    return { id: docRef.id, ...payload };
+}
+
+export async function fetchHaulTicketsForUser(db, user) {
+    if (!user) return [];
+    const ticketsRef = collection(db, "haulTickets");
+    
+    let ticketsQuery;
+
+    switch (user.role) {
+        case 'landowner':
+            ticketsQuery = query(ticketsRef, where("ownerId", "==", user.uid));
+            break;
+        case 'timber-buyer': // This is the supplier
+            ticketsQuery = query(ticketsRef, where("supplierId", "==", user.uid));
+            break;
+        case 'logging-contractor': // This is the logger/hauler
+            ticketsQuery = query(ticketsRef, where("submitterId", "==", user.uid));
+            break;
+        default:
+            return [];
+    }
+
+    const ticketsSnapshot = await getDocs(ticketsQuery);
+    return ticketsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+}
+
+
+export async function fetchActiveProjectsForUser(db, user) {
+    if (!user) return [];
+    const projectsRef = collection(db, "projects");
+    let projectsQuery;
+
+    if (user.role === 'timber-buyer' || user.role === 'logging-contractor') {
+        projectsQuery = query(projectsRef, 
+            where("supplierId", "==", user.uid), 
+            where("status", "==", "harvest_in_progress")
+        );
+    } else {
+        return [];
+    }
+
+    const querySnapshot = await getDocs(projectsQuery);
+    return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+}
+
+export async function deleteHaulTicket(db, ticketId) {
+    if (!ticketId) {
+        throw new Error("A ticket ID must be provided to delete.");
+    }
+    await deleteDoc(doc(db, "haulTickets", ticketId));
+}
+
+// --- NEW FUNCTION for saving project rates ---
+export async function saveProjectRates(db, projectId, rateSets) {
+    if (!projectId) {
+        throw new Error("A project ID must be provided.");
+    }
+    const projectRef = doc(db, "projects", projectId);
+    await updateDoc(projectRef, {
+        rateSets: rateSets
+    });
+}

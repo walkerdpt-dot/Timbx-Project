@@ -22,15 +22,14 @@
   <nav class="bg-green-950 p-2 shadow-md sticky top-0 z-50">
     <div class="container mx-auto flex items-center">
         <div class="flex-1">
-            </div>
+        </div>
 
         <div class="flex-none space-x-1">
             <a href="#home" class="text-white hover:bg-green-800 px-3 py-2 rounded-md font-bold transition duration-200">Home</a>
             <a href="#marketplace" class="text-white hover:bg-green-800 px-3 py-2 rounded-md font-bold transition duration-200">Marketplace</a>
             <a href="#properties" class="text-white hover:bg-green-800 px-3 py-2 rounded-md font-bold transition duration-200">My Properties</a>
             <a href="#my-inquiries" class="text-white hover:bg-green-800 px-3 py-2 rounded-md font-bold transition duration-200">My Inquiries</a>
-            <a href="#haul-tickets" class="text-white hover:bg-green-800 px-3 py-2 rounded-md font-bold transition duration-200">Haul Tickets</a>
-            <a href="#my-loads" class="text-white hover:bg-green-800 px-3 py-2 rounded-md font-bold transition duration-200">My Loads</a>
+            <a href="#logbook" class="text-white hover:bg-green-800 px-3 py-2 rounded-md font-bold transition duration-200">Logbook</a>
             <a href="#my-projects" class="text-white hover:bg-green-800 px-3 py-2 rounded-md font-bold transition duration-200">My Projects</a>
         </div>
 
@@ -134,67 +133,90 @@
         </div>
     </section>
 
-    <section id="haul-tickets" class="main-section hidden p-6 bg-white rounded-lg shadow-md mb-6 max-w-2xl mx-auto">
-        <h2 class="text-3xl font-semibold text-green-800 mb-6 border-b pb-4">Log a New Haul Ticket</h2>
-        <form id="log-load-form" class="space-y-4">
-            <div>
-                <label for="load-job" class="block text-sm font-medium text-gray-700">Select Job/Project</label>
-                <select id="load-job" name="job" class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm" required>
-                    <option value="">Loading active jobs...</option>
-                </select>
+    <section id="logbook" class="main-section hidden p-6 bg-white rounded-lg shadow-md mb-6">
+        <div class="flex flex-col md:flex-row justify-between md:items-center mb-6 border-b pb-4">
+            <h2 class="text-3xl font-semibold text-green-800">Timbx Logbook</h2>
+            <div id="logbook-nav" class="flex space-x-2 mt-4 md:mt-0">
+                <button id="btn-view-loads" class="logbook-nav-btn bg-green-700 text-white font-bold py-2 px-4 rounded-lg">Loads Dashboard</button>
+                <button id="btn-log-new-load" class="logbook-nav-btn bg-gray-200 text-gray-800 font-bold py-2 px-4 rounded-lg">Log New Load</button>
             </div>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                    <label for="load-date" class="block text-sm font-medium text-gray-700">Date & Time</label>
-                    <input type="datetime-local" id="load-date" name="date" class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm" required>
-                </div>
-                <div>
-                    <label for="load-mill" class="block text-sm font-medium text-gray-700">Destination Mill</label>
-                    <select id="load-mill" name="mill" class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm" required>
-                        <option value="">Select a Mill</option>
-                        <option value="Mill A">Mill A</option>
-                        <option value="Mill B">Mill B</option>
-                        <option value="Mill C">Mill C</option>
+        </div>
+        
+        <div id="logbook-view-loads">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-2xl font-semibold text-gray-700">Submitted Loads</h3>
+                <div class="flex items-center space-x-4">
+                    <label for="loads-job-filter" class="text-sm font-medium">Filter by Job:</label>
+                    <select id="loads-job-filter" class="p-2 border border-gray-300 rounded-md shadow-sm">
+                        <option value="all">All Active Jobs</option>
                     </select>
                 </div>
             </div>
-            <div>
-                <label for="load-product" class="block text-sm font-medium text-gray-700">Product</label>
-                <select id="load-product" name="product" class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm" required>
-                    <option value="">Select a Product</option>
-                    <option value="Pine Pulpwood">Pine Pulpwood</option>
-                    <option value="Pine Sawtimber">Pine Sawtimber</option>
-                    <option value="Hardwood Pulpwood">Hardwood Pulpwood</option>
-                    <option value="Hardwood Sawtimber">Hardwood Sawtimber</option>
-                </select>
+            <div id="my-loads-container" class="space-y-4">
+                <p class="text-center text-gray-500 p-4">Loading your submitted loads...</p>
             </div>
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
-                <div>
-                    <label for="load-gross-weight" class="block text-sm font-medium text-gray-700">Gross Weight (lbs)</label>
-                    <input type="number" id="load-gross-weight" name="grossWeight" placeholder="e.g., 80000" class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm" required>
-                </div>
-                <div>
-                    <label for="load-tare-weight" class="block text-sm font-medium text-gray-700">Tare Weight (lbs)</label>
-                    <input type="number" id="load-tare-weight" name="tareWeight" placeholder="e.g., 35000" class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm" required>
-                </div>
-                <div>
-                    <p class="text-sm font-medium text-gray-700">Net Weight (Tons)</p>
-                    <p id="load-net-weight" class="mt-1 block w-full p-2 bg-gray-100 border border-gray-300 rounded-md font-bold text-lg">0.00</p>
-                </div>
+            <div id="my-loads-summary" class="mt-6 pt-4 border-t-2 border-green-700 text-right">
+                <h3 class="text-xl font-bold">Total Net Tons: <span id="total-net-tons" class="text-green-800">0.00</span></h3>
             </div>
-            <div>
-                <label for="load-ticket-photo" class="block text-sm font-medium text-gray-700">Load Ticket Photo</label>
-                <input type="file" id="load-ticket-photo" name="ticketPhoto" class="mt-1 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-green-100 file:text-green-700 hover:file:bg-green-200" accept="image/*">
-            </div>
-            <div class="pt-4 border-t">
-                <button type="submit" class="w-full bg-green-700 hover:bg-green-600 text-white font-bold py-3 px-4 rounded-lg transition duration-200">Submit Ticket</button>
-            </div>
-        </form>
-    </section>
+        </div>
 
-    <section id="my-loads" class="main-section hidden p-6 bg-white rounded-lg shadow-md mb-6">
-        <h2 class="text-3xl font-semibold text-green-800 mb-4">My Loads</h2>
-        <p class="text-gray-500">This feature is coming soon! Your load reports will appear here.</p>
+        <div id="logbook-log-new" class="hidden max-w-2xl mx-auto">
+             <h3 class="text-2xl font-semibold text-gray-700 mb-6 text-center">Log a New Load</h3>
+             <form id="log-load-form" class="space-y-4">
+                <div>
+                    <label for="load-job" class="block text-sm font-medium text-gray-700">Select Job/Project</label>
+                    <select id="load-job" name="job" class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm" required>
+                        <option value="">Loading active jobs...</option>
+                    </select>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label for="load-date" class="block text-sm font-medium text-gray-700">Date & Time</label>
+                        <input type="datetime-local" id="load-date" name="date" class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm" required>
+                    </div>
+                    <div>
+                        <label for="load-mill" class="block text-sm font-medium text-gray-700">Destination Mill</label>
+                        <select id="load-mill" name="mill" class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm" required>
+                            <option value="">Select a Mill</option>
+                            <option value="Mill A">Mill A</option>
+                            <option value="Mill B">Mill B</option>
+                            <option value="Mill C">Mill C</option>
+                        </select>
+                    </div>
+                </div>
+                <div>
+                    <label for="load-product" class="block text-sm font-medium text-gray-700">Product</label>
+                    <select id="load-product" name="product" class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm" required>
+                        <option value="">Select a Product</option>
+                        <option value="Pine Pulpwood">Pine Pulpwood</option>
+                        <option value="Pine Sawtimber">Pine Sawtimber</option>
+                        <option value="Hardwood Pulpwood">Hardwood Pulpwood</option>
+                        <option value="Hardwood Sawtimber">Hardwood Sawtimber</option>
+                    </select>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+                    <div>
+                        <label for="load-gross-weight" class="block text-sm font-medium text-gray-700">Gross Weight (lbs)</label>
+                        <input type="number" id="load-gross-weight" name="grossWeight" placeholder="e.g., 80000" class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm" required>
+                    </div>
+                    <div>
+                        <label for="load-tare-weight" class="block text-sm font-medium text-gray-700">Tare Weight (lbs)</label>
+                        <input type="number" id="load-tare-weight" name="tareWeight" placeholder="e.g., 35000" class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm" required>
+                    </div>
+                    <div>
+                        <p class="text-sm font-medium text-gray-700">Net Weight (Tons)</p>
+                        <p id="load-net-weight" class="mt-1 block w-full p-2 bg-gray-100 border border-gray-300 rounded-md font-bold text-lg">0.00</p>
+                    </div>
+                </div>
+                <div>
+                    <label for="load-ticket-photo" class="block text-sm font-medium text-gray-700">Load Ticket Photo (Optional)</label>
+                    <input type="file" id="load-ticket-photo" name="ticketPhoto" class="mt-1 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-green-100 file:text-green-700 hover:file:bg-green-200" accept="image/*">
+                </div>
+                <div class="pt-4 border-t">
+                    <button type="submit" class="w-full bg-green-700 hover:bg-green-600 text-white font-bold py-3 px-4 rounded-lg transition duration-200">Submit Ticket</button>
+                </div>
+            </form>
+        </div>
     </section>
 
     <section id="my-projects" class="main-section hidden p-6 bg-white rounded-lg shadow-md mb-6">
@@ -261,7 +283,7 @@
           &larr; Back to My Inquiries
         </a>
         <a href="#my-projects" id="back-to-my-projects-btn" class="hidden bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded">
-          &larr; Back to My Projects
+            &larr; Back to My Projects
         </a>
       </div>
       <div id="detail-view-content">
@@ -319,7 +341,7 @@
             </div>
     
             <div id="signup-role-specific-container" class="hidden border-t pt-4 mt-4 space-y-4">
-              
+                
                 <div id="signup-service-area-container" class="space-y-3">
                     <h3 class="text-lg font-semibold text-gray-800">Service Area</h3>
                     <div class="my-2">
@@ -391,7 +413,7 @@
             </div>
             
             <div id="edit-role-specific-container" class="border-t pt-4 mt-4 space-y-4">
-              
+                
                 <div id="edit-forester-details" class="hidden space-y-3">
                   <h3 class="text-lg font-semibold text-gray-800">Forester Details</h3>
                   <label for="edit-forester-experience" class="block text-sm font-medium text-gray-700">Years of Experience</label>
@@ -685,9 +707,10 @@
                     </div>
                 </div>
 
-                <div class="pt-6 border-t mt-6 flex justify-end space-x-3">
+                <div class="pt-6 border-t mt-6 flex justify-end items-center space-x-3">
                     <button type="button" class="bg-gray-200 hover:bg-gray-300 text-gray-800 px-4 py-2 rounded-md font-bold transition close-modal-btn">Cancel</button>
-                    <button type="submit" class="bg-green-700 hover:bg-green-600 text-white px-6 py-2 rounded-md font-bold transition">Post Timber Sale</button>
+                    <button type="button" id="btn-accept-cruise" class="hidden bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md font-bold transition">Accept Cruise & Complete Project</button>
+                    <button type="submit" id="btn-submit-sale-form" class="bg-green-700 hover:bg-green-600 text-white px-6 py-2 rounded-md font-bold transition">Submit</button>
                 </div>
             </form>
         </div>
@@ -915,6 +938,171 @@
             </div>
         </div>
     </div>
+
+    <div id="rate-sheet-modal" class="full-page-section hidden">
+        <div class="modal-content">
+            <span class="close-button close-modal-btn">&times;</span>
+            <h2 id="rate-sheet-title" class="text-2xl font-bold mb-4 text-green-800">Manage Project Rates</h2>
+            <form id="rate-sheet-form" class="space-y-6">
+                <input type="hidden" id="rate-sheet-project-id">
+                
+                <div class="p-4 border rounded-lg bg-gray-50">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="text-xl font-semibold text-gray-800">Rate Sets</h3>
+                        <button type="button" id="add-rate-set-btn" class="text-sm bg-blue-600 text-white font-semibold py-1.5 px-4 rounded-md hover:bg-blue-700">+ Add New Rate Set</button>
+                    </div>
+                    <p class="text-sm text-gray-600 mb-4">Create different sets of rates for different time periods. The rates will apply to any haul ticket with a date on or after the "Effective Date".</p>
+                    <div id="rate-sets-container" class="space-y-4">
+                    </div>
+                </div>
+
+                <div class="pt-6 border-t mt-6 flex justify-end space-x-3">
+                    <button type="button" class="bg-gray-200 hover:bg-gray-300 text-gray-800 px-4 py-2 rounded-md font-bold transition close-modal-btn">Cancel</button>
+                    <button type="submit" class="bg-green-700 hover:bg-green-600 text-white px-6 py-2 rounded-md font-bold transition">Save All Rates</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <div id="cruise-report-modal" class="full-page-section hidden">
+      <div class="modal-content">
+        <span class="close-button close-modal-btn">&times;</span>
+        <div id="cruise-report-content" class="prose max-w-none">
+            </div>
+        <div class="pt-6 border-t mt-6 flex justify-end items-center space-x-3">
+            <button type="button" class="bg-gray-200 hover:bg-gray-300 text-gray-800 px-4 py-2 rounded-md font-bold transition close-modal-btn">Close</button>
+            <button type="button" id="btn-accept-cruise-report" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md font-bold transition">Accept Cruise & Complete Project</button>
+            <button type="button" id="btn-start-timber-sale" class="bg-green-700 hover:bg-green-600 text-white px-6 py-2 rounded-md font-bold transition">Start Timber Sale</button>
+        </div>
+      </div>
+    </div>
+
+    <template id="rate-set-template">
+        <div class="rate-set border-2 p-3 rounded-md bg-white shadow-sm">
+            <div class="flex justify-between items-center border-b pb-2 mb-3">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Effective Date</label>
+                    <input type="date" class="rate-set-effective-date form-input mt-1 p-1.5" required>
+                </div>
+                <button type="button" class="remove-rate-set-btn text-red-500 hover:text-red-700 font-bold p-2">&times; Remove Set</button>
+            </div>
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                <div class="rate-category">
+                    <h4 class="font-bold text-center text-gray-700 mb-2">Mill Prices</h4>
+                    <div class="rate-rows-container space-y-2"></div>
+                    <button type="button" class="add-rate-row-btn text-xs bg-gray-200 hover:bg-gray-300 text-gray-800 w-full mt-2 py-1 rounded-md" data-category="mill">Add Product</button>
+                </div>
+                <div class="rate-category">
+                    <h4 class="font-bold text-center text-gray-700 mb-2">Stumpage</h4>
+                    <div class="rate-rows-container space-y-2"></div>
+                    <button type="button" class="add-rate-row-btn text-xs bg-gray-200 hover:bg-gray-300 text-gray-800 w-full mt-2 py-1 rounded-md" data-category="stumpage">Add Product</button>
+                </div>
+                <div class="rate-category">
+                    <h4 class="font-bold text-center text-gray-700 mb-2">Logging/Hauling</h4>
+                    <div class="rate-rows-container space-y-2"></div>
+                    <button type="button" class="add-rate-row-btn text-xs bg-gray-200 hover:bg-gray-300 text-gray-800 w-full mt-2 py-1 rounded-md" data-category="logging">Add Product</button>
+                </div>
+            </div>
+        </div>
+    </template>
+    
+    <template id="rate-row-template">
+        <div class="rate-row grid grid-cols-12 gap-2 items-center">
+            <div class="col-span-7">
+                <select class="rate-product form-input p-1 w-full text-sm">
+                    <option value="">Select Product</option>
+                    <optgroup label="Pine">
+                        <option>Pine Sawtimber</option>
+                        <option>Pine Chip-n-Saw</option>
+                        <option>Pine Pulpwood</option>
+                    </optgroup>
+                    <optgroup label="Hardwood">
+                        <option>Red Oak Sawtimber</option>
+                        <option>White Oak Sawtimber</option>
+                        <option>Mixed Hardwood Sawtimber</option>
+                        <option>Hardwood Pulpwood</option>
+                    </optgroup>
+                </select>
+            </div>
+            <div class="col-span-4">
+                <input type="number" class="rate-price form-input p-1 w-full text-sm" placeholder="$/Ton" step="0.01">
+            </div>
+            <div class="col-span-1 text-right">
+                <button type="button" class="remove-rate-row-btn text-red-500 hover:text-red-700 font-mono text-lg">&times;</button>
+            </div>
+        </div>
+    </template>
+    
+    <template id="inventory-stand-template">
+      <div class="inventory-stand border p-3 rounded-md bg-white">
+          <div class="flex justify-between items-center mb-2">
+              <select class="inventory-stand-name font-semibold text-lg border-b pb-1">
+                  <option value="">Select Harvest Area</option>
+              </select>
+              <button type="button" class="remove-inventory-stand-btn text-red-500 hover:text-red-700 font-bold text-2xl">&times;</button>
+          </div>
+          <div class="inventory-table-container space-y-2">
+          </div>
+          <button type="button" class="add-inventory-row-btn mt-2 text-sm bg-blue-100 text-blue-800 font-semibold py-1 px-3 rounded hover:bg-blue-200">+ Add Product</button>
+      </div>
+    </template>
+    
+    <template id="inventory-row-template">
+        <div class="inventory-row grid grid-cols-12 gap-2 items-center">
+            <div class="col-span-12 sm:col-span-4">
+                <label class="text-xs text-gray-500 sm:hidden">Product</label>
+                <select class="inventory-product form-input p-1">
+                    <option value="">Select Product</option>
+                    <optgroup label="Pine">
+                        <option>Pine Sawtimber</option>
+                        <option>Pine Chip-n-Saw</option>
+                        <option>Pine Pulpwood</option>
+                        <option>Pine Topwood</option>
+                        <option>Pine Poles</option>
+                    </optgroup>
+                    <optgroup label="Oak">
+                        <option>Red Oak Sawtimber</option>
+                        <option>White Oak Sawtimber</option>
+                        <option>Oak Crosstie/Pallet</option>
+                    </optgroup>
+                     <optgroup label="Other Hardwood">
+                        <option>Gum Sawtimber</option>
+                        <option>Poplar Sawtimber</option>
+                        <option>Ash Sawtimber</option>
+                        <option>Hickory Sawtimber</option>
+                        <option>Mixed Hardwood Sawtimber</option>
+                    </optgroup>
+                    <optgroup label="Pulpwood">
+                        <option>Hardwood Pulpwood</option>
+                    </optgroup>
+                     <optgroup label="Other">
+                        <option>Cypress</option>
+                    </optgroup>
+                </select>
+            </div>
+            <div class="col-span-6 sm:col-span-3">
+                <label class="text-xs text-gray-500 sm:hidden">Volume</label>
+                <input type="number" class="inventory-volume form-input p-1" placeholder="Volume">
+            </div>
+            <div class="col-span-6 sm:col-span-2">
+                 <label class="text-xs text-gray-500 sm:hidden">Units</label>
+                 <select class="inventory-unit form-input p-1">
+                    <option>Tons</option>
+                    <option>Cords</option>
+                    <option>MBF Doyle</option>
+                    <option>MBF Scribner</option>
+                    <option>MBF Int'l 1/4"</option>
+                </select>
+            </div>
+             <div class="col-span-10 sm:col-span-2">
+                 <label class="text-xs text-gray-500 sm:hidden">Trees (Optional)</label>
+                <input type="number" class="inventory-trees form-input p-1" placeholder="Tree Count">
+            </div>
+            <div class="col-span-2 sm:col-span-1 text-right">
+                <button type="button" class="remove-inventory-row-btn text-red-500 hover:text-red-700 p-1 font-mono font-bold text-lg">&times;</button>
+            </div>
+        </div>
+    </template>
 
   </div>
 

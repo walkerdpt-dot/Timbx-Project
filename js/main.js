@@ -10,7 +10,9 @@ import {
     updateUserProfile, getUserProfileById,
     updateProject, saveNewProject, sendCruiseInquiries, fetchInquiriesForUser,
     getUserProfile, updateInquiryStatus, createOrGetInquiryProject,
-    fetchQuotesForProject, saveTimberSale
+    fetchQuotesForProject, saveTimberSale,
+    saveHaulTicket, fetchHaulTicketsForUser, fetchActiveProjectsForUser,
+    deleteHaulTicket, saveProjectRates
 } from './firestore.js';
 import {
     getMapInstance,
@@ -27,7 +29,8 @@ import {
     getUpdatedLocation,
     mapInstances,
     updateServiceAreaCircle,
-    myPropertiesLayerGroup
+    myPropertiesLayerGroup,
+    updateInventoryStandDropdowns
 } from './map.js';
 
 // --- Constants for Role-Specific Services ---
@@ -54,7 +57,7 @@ let allProjects = [];
 let allProfessionalProfiles = [];
 let allInquiries = [];
 let db, auth;
-export let globalMarketplaceLayerGroup; // Added for map filtering
+export let globalMarketplaceLayerGroup; 
 
 /**
  * Robustly parses and sanitizes GeoJSON data from the database.
@@ -101,7 +104,7 @@ async function onUserStatusChange(user) {
                 fetchProperties(db),
                 fetchProfessionalProfiles(db),
                 fetchProjects(db),
-                fetchInquiriesForUser(db, user.uid) // Fetch all inquiries user is involved in
+                fetchInquiriesForUser(db, user.uid)
             ]);
             allProperties = properties;
             allProfessionalProfiles = profiles;
@@ -154,14 +157,13 @@ async function renderMainSection(sectionId) {
             let map = getMapInstance('global-map');
             if (!map) {
                 map = initGlobalMap();
-                 if (map) {
+                if (map) {
                     globalMarketplaceLayerGroup = L.featureGroup().addTo(map);
                     map.on('movestart', () => document.getElementById('search-this-area-btn').classList.remove('hidden'));
                 }
             }
-            // Ensure layer group exists if map was already initialized
             if (map && !globalMarketplaceLayerGroup) {
-                 globalMarketplaceLayerGroup = L.featureGroup().addTo(map);
+                globalMarketplaceLayerGroup = L.featureGroup().addTo(map);
             }
             setTimeout(() => map?.invalidateSize(), 0);
             updateMapAndList();
@@ -179,8 +181,8 @@ async function renderMainSection(sectionId) {
         case 'my-profile':
             renderMyProfile();
             break;
-        case 'haul-tickets':
-            initializeLogLoadForm();
+        case 'logbook':
+            initializeLogbook();
             break;
     }
 }
@@ -195,7 +197,6 @@ function updateMapAndList() {
     globalMarketplaceLayerGroup.clearLayers();
     let listItemsHTML = '';
 
-    // --- Filter Settings ---
     const showProjects = document.getElementById('filter-projects').checked;
     const showBuyers = document.getElementById('filter-buyers').checked;
     const showForesters = document.getElementById('filter-foresters').checked;
@@ -206,7 +207,6 @@ function updateMapAndList() {
     const loggerService = document.getElementById('filter-logging-contractor-services').value;
     const providerService = document.getElementById('filter-service-provider-services').value;
     
-    // --- Marker Styles ---
     const markerStyles = {
         project: { radius: 7, fillColor: "#4f46e5", color: "#fff", weight: 1.5, opacity: 1, fillOpacity: 0.9 },
         'timber-buyer': { radius: 6, fillColor: "#78350f", color: "#fff", weight: 1.5, opacity: 1, fillOpacity: 0.9 },
@@ -215,7 +215,6 @@ function updateMapAndList() {
         'service-provider': { radius: 6, fillColor: "#4d7c0f", color: "#fff", weight: 1.5, opacity: 1, fillOpacity: 0.9 }
     };
     
-    // --- Process Projects ---
     if (showProjects) {
         allProjects.forEach(project => {
             const geoJSON = sanitizeGeoJSON(project.geoJSON);
@@ -225,7 +224,7 @@ function updateMapAndList() {
             const projectCenter = projectLayer.getBounds().getCenter();
 
             if (bounds.contains(projectCenter)) {
-                 const marker = L.circleMarker(projectCenter, markerStyles.project)
+                const marker = L.circleMarker(projectCenter, markerStyles.project)
                     .bindTooltip(`<b>Project:</b> ${project.propertyName}`)
                     .on('click', () => window.location.hash = `#detail?type=project&id=${project.id}&from=marketplace`);
                 marker.addTo(globalMarketplaceLayerGroup);
@@ -239,7 +238,6 @@ function updateMapAndList() {
         });
     }
 
-    // --- Process Professionals ---
     allProfessionalProfiles.forEach(prof => {
         if (!prof.location || typeof prof.location.lat !== 'number' || typeof prof.location.lng !== 'number') return;
         
@@ -272,7 +270,6 @@ function updateMapAndList() {
         }
 
         if (shouldShow && serviceMatch) {
-            // **FIX:** Moved this line up so the variable exists before it's used.
             const formattedRole = (role.charAt(0).toUpperCase() + role.slice(1)).replace('-', ' ');
 
             const marker = L.circleMarker(profLatLng, markerStyles[role])
@@ -294,7 +291,6 @@ function updateMapAndList() {
         listContainer.innerHTML = listItemsHTML;
     }
 }
-
 
 // --- Event Listeners ---
 function attachAllEventListeners() {
@@ -344,6 +340,7 @@ function attachAllEventListeners() {
     document.getElementById('log-load-form')?.addEventListener('submit', handleLogLoadSubmit);
     document.getElementById('load-gross-weight')?.addEventListener('input', calculateNetWeight);
     document.getElementById('load-tare-weight')?.addEventListener('input', calculateNetWeight);
+    document.getElementById('rate-sheet-form')?.addEventListener('submit', handleSaveRateSheet);
     
     document.getElementById('success-find-forester-btn')?.addEventListener('click', () => {
         const lastSavedPropertyId = document.getElementById('save-success-modal').dataset.propertyId;
@@ -418,6 +415,68 @@ function attachAllEventListeners() {
             const inquiryId = targetButton.dataset.inquiryId;
             handleCancelInquiry(inquiryId);
         }
+        if (targetButton.matches('.manage-rates-btn')) {
+            const projectId = targetButton.dataset.projectId;
+            openRateSheetModal(projectId);
+        }
+        if (targetButton.matches('.submit-cruise-btn')) {
+            const projectId = targetButton.dataset.projectId;
+            openTimberSaleForm(projectId);
+        }
+        if (targetButton.matches('.approve-cruise-btn')) {
+            const projectId = targetButton.dataset.projectId;
+            openCruiseReportModal(projectId);
+        }
+        if (targetButton.matches('.retract-cruise-btn')) {
+            const projectId = targetButton.dataset.projectId;
+            handleRetractCruise(projectId);
+        }
+        if (targetButton.id === 'btn-accept-cruise-report') {
+            const projectId = targetButton.dataset.projectId;
+            if (confirm("Are you sure you want to accept this cruise and complete the project? This will finalize the service with the forester.")) {
+                try {
+                    await updateProject(db, projectId, { status: 'completed' });
+                    alert("Cruise accepted and project marked as complete!");
+                    closeModal('cruise-report-modal');
+                    await onUserStatusChange(currentUser);
+                    window.location.hash = '#my-projects';
+                } catch (error) {
+                    console.error("Error completing project:", error);
+                    alert("There was an error completing the project.");
+                }
+            }
+        }
+        if (targetButton.id === 'btn-start-timber-sale') {
+            const projectId = targetButton.dataset.projectId;
+             if (confirm("This will post the timber sale to the public marketplace. Are you sure you want to proceed?")) {
+                try {
+                    const project = allProjects.find(p => p.id === projectId);
+                    if (!project || !project.cruiseData) throw new Error("Cruise data is missing.");
+
+                    const salePayload = {
+                        ownerId: project.ownerId,
+                        ownerName: project.ownerName,
+                        projectId: project.id,
+                        foresterId: project.foresterId || null,
+                        propertyName: project.propertyName,
+                        geoJSON: project.geoJSON,
+                        ...project.cruiseData.details,
+                        cruiseData: project.cruiseData
+                    };
+
+                    await saveTimberSale(db, salePayload);
+                    await updateProject(db, projectId, { status: 'open_for_bids' });
+                    
+                    alert("Timber sale is now live on the marketplace!");
+                    closeModal('cruise-report-modal');
+                    await onUserStatusChange(currentUser);
+                    window.location.hash = '#my-projects';
+                } catch (error) {
+                     console.error("Error starting timber sale:", error);
+                    alert("There was an error starting the timber sale.");
+                }
+             }
+        }
         if (targetButton.matches('.more-options-btn')) {
             const dropdown = targetButton.nextElementSibling;
             document.querySelectorAll('.more-options-dropdown').forEach(d => {
@@ -446,6 +505,22 @@ function attachAllEventListeners() {
         if (targetButton.matches('.get-cruise-btn')) {
             const propertyId = targetButton.dataset.propertyId;
             openInviteForesterModal(propertyId);
+        }
+        if (targetButton.matches('.edit-load-btn')) {
+            alert('Edit functionality is coming soon!');
+        }
+        if (targetButton.matches('.delete-load-btn')) {
+            const ticketId = targetButton.dataset.ticketId;
+            if (confirm("Are you sure you want to permanently delete this haul ticket? This action cannot be undone.")) {
+                try {
+                    await deleteHaulTicket(db, ticketId);
+                    alert("Ticket deleted successfully.");
+                    renderMyLoads();
+                } catch (error) {
+                    console.error("Error deleting ticket:", error);
+                    alert("Could not delete the ticket. Please try again.");
+                }
+            }
         }
     });
     
@@ -478,12 +553,18 @@ function attachAllEventListeners() {
 
     document.getElementById('proceed-without-forester-btn')?.addEventListener('click', (e) => {
         const propertyId = e.target.closest('.modal-overlay').dataset.propertyId;
-        closeModal('forester-first-modal');
         openTimberSaleForm(propertyId);
     });
 
     document.getElementById('timber-sale-form')?.addEventListener('submit', handleTimberSaleSubmit);
     document.getElementById('send-invites-btn')?.addEventListener('click', handleSendInquiries);
+    
+    document.getElementById('timber-inventory-stands-container')?.addEventListener('change', (e) => {
+        if (e.target.classList.contains('inventory-product')) {
+            const standElement = e.target.closest('.inventory-stand');
+            updateProductDropdowns(standElement);
+        }
+    });
 }
 
 function setupServiceFilter(checkboxId, dropdownId, services) {
@@ -504,7 +585,6 @@ function setupServiceFilter(checkboxId, dropdownId, services) {
 function createAvatar(username) {
     if (!username) return document.createElement('div');
     const initial = username.charAt(0).toUpperCase();
-    // New Muted Color Palette
     const colors = ['#94a3b8', '#a3a3a3', '#78716c', '#84cc16', '#6ee7b7', '#67e8f9', '#7dd3fc', '#a5b4fc', '#d8b4fe'];
     const charCodeSum = username.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
     const color = colors[charCodeSum % colors.length];
@@ -544,10 +624,9 @@ function updateLoginUI() {
     
     const tabVisibility = {
         '#properties': role === 'landowner',
-        '#my-loads': role === 'landowner' || role === 'timber-buyer' || role === 'logging-contractor',
         '#my-projects': isLoggedIn,
         '#my-inquiries': ['forester', 'timber-buyer', 'logging-contractor', 'service-provider'].includes(role),
-        '#haul-tickets': role === 'timber-buyer' || role === 'logging-contractor',
+        '#logbook': isLoggedIn,
     };
 
     for (const tab in tabVisibility) {
@@ -573,11 +652,9 @@ function openModal(modalId) { document.getElementById(modalId)?.classList.remove
 function closeModal(modalId) { document.getElementById(modalId)?.classList.add('hidden'); }
 function openSignupModal() { 
     document.getElementById('signup-form')?.reset(); 
-    // Reset role-specific fields visibility
     document.getElementById('signup-role-specific-container').classList.add('hidden');
     document.querySelectorAll('[id^="signup-"][id$="-details"]').forEach(div => div.classList.add('hidden'));
     
-    // Populate checkboxes dynamically
     populateCheckboxes('signup-forester-specialties', FORESTER_SPECIALTIES, 'foresterSpecialties');
     populateCheckboxes('signup-buyer-products', BUYER_PRODUCTS, 'buyerProducts');
     populateCheckboxes('signup-logger-services', LOGGING_CONTRACTOR_SERVICES, 'loggerServices');
@@ -737,11 +814,6 @@ function renderUserProfileDetail(user) {
     }
 }
 
-// ... ALL OTHER FUNCTIONS (renderMyProperties, renderMyProjects, etc.) GO HERE
-// ... Copy them from the previous response as they are unchanged.
-// ... This is to avoid making the response excessively long again.
-// The code below this comment should be the remainder of your main.js file.
-
 // --- My Properties Section ---
 async function renderPropertiesForCurrentUser() {
     if (!currentUser || currentUser.role !== 'landowner') return;
@@ -797,15 +869,15 @@ async function renderMyPropertiesList(properties) {
         let buttonHTML = '';
 
         if (project) {
-            let projectStatusText = project.status.replace('_', ' ');
+            let projectStatusText = project.status.replace(/_/g, ' ');
             statusHTML = `<p class="text-sm text-blue-600 font-semibold mt-1">Status: 
-                                <a href="#my-projects?projectId=${project.id}" class="underline hover:text-blue-800 capitalize">${projectStatusText}</a>
-                            </p>`;
-             buttonHTML = `<a href="#my-projects?projectId=${project.id}" class="bg-purple-600 hover:bg-purple-700 text-white text-xs px-2 py-1.5 rounded-md font-semibold">View Project</a>`;
+                            <a href="#my-projects?projectId=${project.id}" class="underline hover:text-blue-800 capitalize">${projectStatusText}</a>
+                        </p>`;
+            buttonHTML = `<a href="#my-projects?projectId=${project.id}" class="bg-purple-600 hover:bg-purple-700 text-white text-xs px-2 py-1.5 rounded-md font-semibold">View Project</a>`;
         } else {
             statusHTML = `<p class="text-sm text-gray-500 mt-1">Status: <span class="font-medium text-gray-700">Ready</span></p>`;
             buttonHTML = `<button class="get-cruise-btn bg-blue-600 hover:bg-blue-700 text-white text-xs px-2 py-1.5 rounded-md font-semibold" data-property-id="${prop.id}">Get a Professional Cruise</button>
-                                  <button class="seek-services-btn bg-teal-500 hover:bg-teal-600 text-white text-xs px-2 py-1.5 rounded-md font-semibold" data-property-id="${prop.id}" data-property-name="${prop.name}">Seek Other Services</button>`;
+                                <button class="seek-services-btn bg-teal-500 hover:bg-teal-600 text-white text-xs px-2 py-1.5 rounded-md font-semibold" data-property-id="${prop.id}" data-property-name="${prop.name}">Seek Other Services</button>`;
         }
 
         li.innerHTML = `
@@ -858,121 +930,75 @@ async function renderMyPropertiesList(properties) {
     if (allBounds.length > 0) mapInstance.fitBounds(L.latLngBounds(allBounds), { padding: [50, 50] });
 }
 
-// --- My Projects Section (Landowner View) ---
+// --- My Projects Section ---
 async function renderMyProjects() {
     if (!currentUser) return;
     const container = document.getElementById('my-projects-container');
     container.innerHTML = '<p class="text-center p-4">Loading your projects...</p>';
 
-    const myProjects = allProjects.filter(p => p.ownerId === currentUser.uid);
-    const mySentInquiries = allInquiries.filter(i => i.fromUserId === currentUser.uid);
-    const myReceivedQuotes = await fetchQuotesForProject(db, myProjects.map(p => p.id), currentUser.uid);
-    
-    const activeProjects = myProjects.filter(p => {
-        if (p.status !== 'inquiry') return true; 
-        const inquiriesForProject = mySentInquiries.filter(i => i.projectId === p.id);
-        if (inquiriesForProject.length === 0 && p.createdAt?.seconds > (Date.now()/1000 - 300)) { 
-            return true; // Grace period for newly created projects
-        }
-        return inquiriesForProject.some(i => i.status !== 'withdrawn' && i.status !== 'declined');
-    });
+    let relevantProjects = [];
+    if (currentUser.role === 'landowner') {
+        relevantProjects = allProjects.filter(p => p.ownerId === currentUser.uid);
+    } else if (currentUser.role === 'timber-buyer') {
+        relevantProjects = allProjects.filter(p => p.supplierId === currentUser.uid);
+    } else if (currentUser.role === 'forester') {
+        relevantProjects = allProjects.filter(p => p.foresterId === currentUser.uid);
+    }
 
-    if (activeProjects.length === 0) {
-        container.innerHTML = '<p class="text-center p-4 text-gray-600">You have no active projects. Seek a service from the "My Properties" page to get started.</p>';
+    if (relevantProjects.length === 0) {
+        container.innerHTML = '<p class="text-center p-4 text-gray-600">You have no active projects.</p>';
         return;
     }
 
-    const statusOrder = { 'in_progress': 1, 'inquiry': 2, 'open': 3 };
-    activeProjects.sort((a, b) => {
-        const aHasQuotes = myReceivedQuotes.some(q => q.projectId === a.id);
-        const bHasQuotes = myReceivedQuotes.some(q => q.projectId === b.id);
-        if (a.status === 'inquiry' && b.status === 'inquiry') {
-            if (aHasQuotes && !bHasQuotes) return -1;
-            if (!aHasQuotes && bHasQuotes) return 1;
+    const groupedProjects = {
+        inquiry: [],
+        cruise_in_progress: [],
+        pending_approval: [],
+        harvest_in_progress: [],
+        completed: [],
+        other: []
+    };
+
+    relevantProjects.forEach(p => {
+        if (groupedProjects[p.status]) {
+            groupedProjects[p.status].push(p);
+        } else {
+            groupedProjects.other.push(p);
         }
-        return (statusOrder[a.status] || 99) - (statusOrder[b.status] || 99) || (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0)
     });
 
     let allContent = '';
-    for (const project of activeProjects) {
-        let projectContent = '';
-        if (project.status === 'inquiry') {
-            const inquiries = mySentInquiries.filter(i => i.projectId === project.id && i.status !== 'withdrawn');
-            const quotes = myReceivedQuotes.filter(q => q.projectId === project.id);
+    const statusOrder = ['inquiry', 'cruise_in_progress', 'pending_approval', 'harvest_in_progress', 'completed', 'other'];
+    const statusHeadings = {
+        inquiry: 'Awaiting Quotes',
+        cruise_in_progress: 'Cruise in Progress',
+        pending_approval: 'Pending Landowner Approval',
+        harvest_in_progress: 'Harvest in Progress',
+        completed: 'Completed',
+        other: 'Other'
+    };
 
-            const inquiryStatusOrder = { 'quoted': 1, 'pending': 2, 'declined': 3 };
-            inquiries.sort((a, b) => (inquiryStatusOrder[a.status] || 99) - (inquiryStatusOrder[b.status] || 99));
+    for (const status of statusOrder) {
+        const projects = groupedProjects[status];
+        if (projects.length === 0) continue;
 
-            const inquiriesHTML = inquiries.map(inquiry => {
-                const professional = allProfessionalProfiles.find(p => p.id === inquiry.toUserId);
-                const inquiryDate = inquiry.createdAt?.toDate ? inquiry.createdAt.toDate().toLocaleDateString() : 'N/A';
-                
-                let actionButtons = `<button class="view-inquiry-btn text-xs bg-gray-200 hover:bg-gray-300 text-gray-700 font-semibold py-1 px-2 rounded" data-inquiry-id="${inquiry.id}">View</button>`;
-                if (inquiry.status === 'pending') {
-                    actionButtons += `<button class="cancel-inquiry-btn text-xs bg-red-100 hover:bg-red-200 text-red-700 font-semibold py-1 px-2 rounded" data-inquiry-id="${inquiry.id}">Withdraw</button>`;
-                }
+        allContent += `<div class="mb-8">
+                         <h3 class="text-2xl font-semibold text-gray-800 border-b-2 border-gray-200 pb-2 mb-4">${statusHeadings[status]}</h3>
+                         <div class="space-y-6">`;
 
-                let statusColor = 'bg-gray-100 text-gray-800';
-                if (inquiry.status === 'pending') statusColor = 'bg-yellow-100 text-yellow-800';
-                if (inquiry.status === 'quoted') statusColor = 'bg-blue-100 text-blue-800';
-                if (inquiry.status === 'declined') statusColor = 'bg-red-100 text-red-800';
-                
-                return `
-                    <div class="grid grid-cols-3 items-center p-2 border-t text-sm">
-                        <div>
-                           <p>To: <a href="#detail?type=profile&id=${inquiry.toUserId}&from=my-projects" class="font-semibold text-blue-600 hover:underline">${professional?.username || '...'}</a></p>
-                           <p class="text-xs text-gray-500">Sent: ${inquiryDate}</p>
-                        </div>
-                        <div class="text-center">
-                            <span class="text-xs font-medium py-1 px-2 rounded-full capitalize ${statusColor}">${inquiry.status}</span>
-                        </div>
-                        <div class="flex items-center justify-end gap-2">
-                            ${actionButtons}
-                        </div>
-                    </div>
-                `;
-            }).join('');
-
-            const quoteCount = quotes.length;
-
-            projectContent = `
-                <div class="border-t pt-4 mt-4">
-                    <h4 class="font-semibold text-gray-800">Inquiries Sent</h4>
-                    <div class="mt-2 border rounded-md bg-gray-50">
-                        ${inquiriesHTML || '<p class="text-sm text-center p-2 text-gray-500">No inquiries found.</p>'}
-                    </div>
-                    <div class="mt-4 flex justify-end">
-                        <button class="view-quotes-btn bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-md ${quoteCount === 0 ? 'opacity-50 cursor-not-allowed' : ''}" data-project-id="${project.id}" ${quoteCount === 0 ? 'disabled' : ''}>
-                            View Quotes (${quoteCount})
-                        </button>
-                    </div>
-                </div>
-            `;
-        } else if (project.status === 'open') {
-            projectContent = `<p class="text-sm text-gray-600 mt-2">This project is live on the marketplace. Bids will appear here.</p>`;
-        } else if (project.status === 'in_progress') {
-             projectContent = `<p class="text-sm text-green-700 mt-2">This project is in progress with a selected professional.</p>`;
+        for (const project of projects) {
+            allContent += await renderProjectCard(project);
         }
-        
-        const property = allProperties.find(p => p.id === project.propertyId);
 
-        allContent += `
-            <div class="project-card bg-white p-4 rounded-lg shadow-md border" id="project-${project.id}">
-                <div class="flex justify-between items-start">
-                    <div>
-                        <h3 class="text-xl font-bold text-green-800">
-                            <a href="#detail?type=property&id=${project.propertyId}&from=my-projects" class="hover:underline">${project.propertyName}</a>
-                        </h3>
-                        <p class="text-sm text-gray-500">${property?.acreage?.toFixed(2) || 'N/A'} Acres | ${property?.county || 'N/A'}</p>
-                    </div>
-                    <span class="font-bold capitalize text-indigo-700 bg-indigo-100 py-1 px-3 rounded-full">${project.status.replace('_', ' ')}</span>
-                </div>
-                ${projectContent}
-            </div>
-        `;
+        allContent += `</div></div>`;
+    }
+    
+    if (allContent.trim() === '') {
+        container.innerHTML = '<p class="text-center p-4 text-gray-600">You have no active projects.</p>';
+    } else {
+        container.innerHTML = allContent;
     }
 
-    container.innerHTML = allContent;
 
     const params = new URLSearchParams(window.location.hash.split('?')[1]);
     const projectIdToHighlight = params.get('projectId');
@@ -981,8 +1007,128 @@ async function renderMyProjects() {
     }
 }
 
+async function renderProjectCard(project) {
+    let projectContent = '';
+    const isOwner = project.ownerId === currentUser.uid;
+    const isSupplier = project.supplierId === currentUser.uid;
+    const isForester = project.foresterId === currentUser.uid;
+    const statusText = project.status.replace(/_/g, ' ');
 
-// --- My Inquiries Section (Professional View) ---
+    if (isOwner) {
+        if (project.status === 'inquiry') {
+            projectContent = await renderLandownerInquiryContent(project);
+        } else if (project.status === 'cruise_in_progress') {
+            const forester = allProfessionalProfiles.find(p => p.id === project.foresterId);
+            const acceptedDate = project.quoteAcceptedAt?.toDate().toLocaleDateString() || 'N/A';
+            projectContent = `<div class="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-md text-sm">
+                                <p class="text-blue-800">
+                                    Assigned to forester <strong>${forester?.username || 'N/A'}</strong> on <strong>${acceptedDate}</strong> to perform a timber cruise. Awaiting their data submission.
+                                </p>
+                             </div>`;
+        } else if (project.status === 'pending_approval') {
+             projectContent = `<div class="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-md text-sm">
+                                 <p class="text-yellow-800 font-semibold">The forester has submitted the cruise data. Please review and approve to open the project for bids from timber buyers.</p>
+                                 <div class="mt-3 flex justify-end">
+                                     <button class="approve-cruise-btn bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-md" data-project-id="${project.id}">Review Cruise & Start Sale</button>
+                                 </div>
+                              </div>`;
+        } else if (project.status === 'harvest_in_progress') {
+            const supplier = allProfessionalProfiles.find(p => p.id === project.supplierId);
+            projectContent = `<p class="text-sm text-green-700 mt-2">This project is being harvested by <strong>${supplier?.username || 'N/A'}</strong>.</p>`;
+        }
+    } else if (isSupplier) {
+        if (project.status === 'harvest_in_progress') {
+            projectContent = `<div class="mt-4 flex justify-end">
+                                 <button class="manage-rates-btn bg-orange-600 hover:bg-orange-700 text-white font-bold py-2 px-4 rounded-md" data-project-id="${project.id}">Manage Financial Rates</button>
+                             </div>`;
+        }
+    } else if (isForester) {
+        if (project.status === 'cruise_in_progress') {
+            projectContent = `<div class="mt-4 flex justify-end">
+                                 <button class="submit-cruise-btn bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md" data-project-id="${project.id}">Submit Cruise Data</button>
+                             </div>`;
+        } else if (project.status === 'pending_approval') {
+            projectContent = `<div class="mt-4 p-3 bg-gray-100 border rounded-md text-sm">
+                                <p class="text-gray-700">You have submitted cruise data for this project. Awaiting landowner review.</p>
+                                <div class="mt-3 flex justify-end">
+                                    <button class="retract-cruise-btn bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-2 px-4 rounded-md" data-project-id="${project.id}">Retract Cruise</button>
+                                </div>
+                              </div>`;
+        }
+    }
+
+    const property = allProperties.find(p => p.id === project.propertyId);
+
+    return `
+        <div class="project-card bg-white p-4 rounded-lg shadow-md border" id="project-${project.id}">
+            <div class="flex justify-between items-start">
+                <div>
+                    <h4 class="text-xl font-bold text-green-800">
+                        <a href="#detail?type=property&id=${project.propertyId}&from=my-projects" class="hover:underline">${project.propertyName}</a>
+                    </h4>
+                    <p class="text-sm text-gray-500">${property?.acreage?.toFixed(2) || 'N/A'} Acres | ${property?.county || 'N/A'}</p>
+                </div>
+                <span class="font-bold capitalize text-indigo-700 bg-indigo-100 py-1 px-3 rounded-full text-sm">${statusText}</span>
+            </div>
+            ${projectContent}
+        </div>
+    `;
+}
+
+async function renderLandownerInquiryContent(project) {
+    const mySentInquiries = allInquiries.filter(i => i.fromUserId === currentUser.uid && i.projectId === project.id && i.status !== 'withdrawn');
+    const myReceivedQuotes = await fetchQuotesForProject(db, [project.id], currentUser.uid);
+
+    const inquiryStatusOrder = { 'quoted': 1, 'pending': 2, 'declined': 3 };
+    mySentInquiries.sort((a, b) => (inquiryStatusOrder[a.status] || 99) - (inquiryStatusOrder[b.status] || 99));
+
+    const inquiriesHTML = mySentInquiries.map(inquiry => {
+        const professional = allProfessionalProfiles.find(p => p.id === inquiry.toUserId);
+        const inquiryDate = inquiry.createdAt?.toDate ? inquiry.createdAt.toDate().toLocaleDateString() : 'N/A';
+        
+        let actionButtons = `<button class="view-inquiry-btn text-xs bg-gray-200 hover:bg-gray-300 text-gray-700 font-semibold py-1 px-2 rounded" data-inquiry-id="${inquiry.id}">View</button>`;
+        if (inquiry.status === 'pending') {
+            actionButtons += `<button class="cancel-inquiry-btn text-xs bg-red-100 hover:bg-red-200 text-red-700 font-semibold py-1 px-2 rounded" data-inquiry-id="${inquiry.id}">Withdraw</button>`;
+        }
+
+        let statusColor = 'bg-gray-100 text-gray-800';
+        if (inquiry.status === 'pending') statusColor = 'bg-yellow-100 text-yellow-800';
+        if (inquiry.status === 'quoted') statusColor = 'bg-blue-100 text-blue-800';
+        if (inquiry.status === 'declined') statusColor = 'bg-red-100 text-red-800';
+        
+        return `
+            <div class="grid grid-cols-3 items-center p-2 border-t text-sm">
+                <div>
+                   <p>To: <a href="#detail?type=profile&id=${inquiry.toUserId}&from=my-projects" class="font-semibold text-blue-600 hover:underline">${professional?.username || '...'}</a></p>
+                   <p class="text-xs text-gray-500">Sent: ${inquiryDate}</p>
+                </div>
+                <div class="text-center">
+                    <span class="text-xs font-medium py-1 px-2 rounded-full capitalize ${statusColor}">${inquiry.status}</span>
+                </div>
+                <div class="flex items-center justify-end gap-2">
+                    ${actionButtons}
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    const quoteCount = myReceivedQuotes.length;
+
+    return `
+        <div class="border-t pt-4 mt-4">
+            <h4 class="font-semibold text-gray-800">Inquiries Sent</h4>
+            <div class="mt-2 border rounded-md bg-gray-50">
+                ${inquiriesHTML || '<p class="text-sm text-center p-2 text-gray-500">No inquiries found.</p>'}
+            </div>
+            <div class="mt-4 flex justify-end">
+                <button class="view-quotes-btn bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-md ${quoteCount === 0 ? 'opacity-50 cursor-not-allowed' : ''}" data-project-id="${project.id}" ${quoteCount === 0 ? 'disabled' : ''}>
+                    View Quotes (${quoteCount})
+                </button>
+            </div>
+        </div>
+    `;
+}
+
 async function renderInquiriesForCurrentUser() {
     const professionalRoles = ['forester', 'timber-buyer', 'logging-contractor', 'service-provider'];
     if (!currentUser || !professionalRoles.includes(currentUser.role)) return;
@@ -1127,13 +1273,76 @@ function getPropertyDataFromForm() {
 
 async function handleTimberSaleSubmit(event) {
     event.preventDefault();
-    if (!currentUser) {
-        alert("You must be logged in.");
-        return;
+    if (!currentUser) return alert("You must be logged in.");
+    
+    const projectId = document.getElementById('timber-sale-property-id').value;
+    const annotations = getProjectAnnotationsAsGeoJSON();
+    
+    const inventory = [];
+    document.querySelectorAll('.inventory-stand').forEach(stand => {
+        const standData = { name: stand.querySelector('.inventory-stand-name').value, products: [] };
+        stand.querySelectorAll('.inventory-row').forEach(row => {
+            const product = row.querySelector('.inventory-product').value;
+            const volume = row.querySelector('.inventory-volume').value;
+            if (product && volume) {
+                standData.products.push({
+                    product: product,
+                    volume: volume,
+                    units: row.querySelector('.inventory-unit').value,
+                    trees: row.querySelector('.inventory-trees').value
+                });
+            }
+        });
+        if (standData.name && standData.products.length > 0) {
+            inventory.push(standData);
+        }
+    });
+
+    const submitButton = event.target.querySelector('#btn-submit-sale-form');
+    submitButton.disabled = true;
+    submitButton.textContent = 'Saving...';
+
+    try {
+        if (currentUser.role === 'forester') {
+            const saleFormData = {
+                saleName: document.getElementById('sale-name').value,
+                county: document.getElementById('sale-county').value,
+                state: document.getElementById('sale-state').value,
+                bidMethod: document.getElementById('sale-type').value,
+                bidDeadline: document.getElementById('bid-deadline').value,
+                harvestDescription: document.getElementById('sale-harvest-desc').value,
+                boundaryDescription: document.getElementById('sale-boundary-desc').value,
+                accessDescription: document.getElementById('sale-access-desc').value,
+                loggingConditions: document.getElementById('sale-logging-conditions').value,
+                performanceBondRequired: document.getElementById('sale-performance-bond').checked,
+                performanceBondAmount: document.getElementById('sale-performance-bond-amount').value,
+                guaranteeTally: document.getElementById('sale-guarantee-tally').checked,
+                moreConditions: document.getElementById('sale-more-conditions').value
+            };
+
+            await updateProject(db, projectId, {
+                status: 'pending_approval',
+                cruiseData: {
+                    details: saleFormData,
+                    inventory: inventory,
+                    annotations: JSON.stringify(annotations)
+                }
+            });
+            alert("Cruise data submitted successfully! The landowner has been notified.");
+        } 
+        
+        closeModal('timber-sale-form-modal');
+        await onUserStatusChange(currentUser);
+        window.location.hash = '#my-projects';
+
+    } catch (error) {
+        console.error("Error in timber sale submission:", error);
+        alert("There was an error. Please try again.");
+    } finally {
+        submitButton.disabled = false;
     }
-    alert("Functionality to save and post this timber sale is being connected. This is a placeholder.");
-    // In the future, this will gather all data from the form and save it.
 }
+
 
 async function handleSubmitBidOrQuote(event) {
     event.preventDefault();
@@ -1274,16 +1483,49 @@ async function handleSendInquiries(event) {
 }
 
 async function handleAcceptQuote(quoteId, projectId) {
-    if (!confirm("Are you sure you want to accept this quote? This will notify the professional and start the project.")) return;
+    const quotesSnapshot = await getDocs(query(collection(db, "quotes"), where("projectId", "==", projectId)));
+    const allQuotesForProject = quotesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    const acceptedQuote = allQuotesForProject.find(q => q.id === quoteId);
+
+    if (!acceptedQuote) {
+        alert("Error: Could not find the selected quote.");
+        return;
+    }
+
+    const professionalRole = acceptedQuote.professionalRole;
+    let projectUpdate = {};
+    let alertMessage = "";
+
+    if (professionalRole === 'forester') {
+        if (!confirm("Are you sure you want to accept this forester's quote for a timber cruise?")) return;
+        projectUpdate = {
+            status: 'cruise_in_progress',
+            foresterId: acceptedQuote.professionalId,
+            quoteAcceptedAt: serverTimestamp()
+        };
+        alertMessage = "Quote accepted! The forester has been assigned to cruise the timber.";
+    } else if (professionalRole === 'timber-buyer') {
+        if (!confirm("Are you sure you want to accept this bid? This will assign the buyer to the project and start the harvest.")) return;
+        projectUpdate = {
+            status: 'harvest_in_progress',
+            supplierId: acceptedQuote.professionalId,
+            quoteAcceptedAt: serverTimestamp()
+        };
+        alertMessage = "Bid accepted! The timber buyer has been assigned to the project.";
+    } else {
+        alert("Cannot determine professional role. Action aborted.");
+        return;
+    }
 
     try {
-        await updateProject(db, projectId, { status: 'in_progress' });
-        alert("Quote accepted! The professional has been notified.");
+        await updateProject(db, projectId, projectUpdate);
+        alert(alertMessage);
         closeModal('view-quotes-modal');
         await onUserStatusChange(currentUser);
+        window.location.hash = '#my-projects';
     } catch (error) {
         console.error("Error accepting quote:", error);
-        alert("There was an error. Please try again.");
+        alert("There was an error processing your acceptance. Please try again.");
     }
 }
 
@@ -1328,6 +1570,19 @@ async function handleCancelInquiry(inquiryId) {
     } catch (error) {
         console.error("Error withdrawing inquiry:", error);
         alert("Failed to withdraw inquiry. Please try again.");
+    }
+}
+
+
+async function handleRetractCruise(projectId) {
+    if (!confirm("Are you sure you want to retract your cruise submission? This will allow you to make edits and resubmit.")) return;
+    try {
+        await updateProject(db, projectId, { status: 'cruise_in_progress' });
+        alert("Cruise retracted successfully. You can now make edits.");
+        await onUserStatusChange(currentUser);
+    } catch (error) {
+        console.error("Error retracting cruise:", error);
+        alert("There was an error retracting the cruise. Please try again.");
     }
 }
 
@@ -1456,43 +1711,89 @@ async function openViewInquiryModal(inquiryId) {
 }
 
 
-async function openTimberSaleForm(propertyId) {
-    const property = allProperties.find(p => p.id === propertyId);
-    if (!property) return;
-    
+async function openTimberSaleForm(projectId) {
+    const project = allProjects.find(p => p.id === projectId);
+    if (!project) {
+        alert("Project not found.");
+        return;
+    }
+    const property = allProperties.find(p => p.id === project.propertyId);
+    if (!property) {
+        alert("Associated property not found.");
+        return;
+    }
+
     const form = document.getElementById('timber-sale-form');
     form.reset();
-    document.getElementById('timber-sale-property-id').value = propertyId;
-    document.getElementById('sale-name').value = property.name || '';
-    document.getElementById('sale-county').value = property.county || '';
+    document.getElementById('timber-sale-property-id').value = projectId;
+
+    const title = document.getElementById('timber-sale-form-title');
+    const submitBtn = document.getElementById('btn-submit-sale-form');
+    const acceptCruiseBtn = document.getElementById('btn-accept-cruise');
+    
+    acceptCruiseBtn.classList.add('hidden'); 
+
+    if (currentUser.role === 'forester' && project.status === 'cruise_in_progress') {
+        title.textContent = 'Submit Cruise Data';
+        submitBtn.textContent = 'Submit Cruise for Review';
+    } else if (currentUser.role === 'landowner' && project.status === 'pending_approval') {
+        title.textContent = 'Review Cruise & Post Sale';
+        submitBtn.textContent = 'Post Timber Sale';
+        acceptCruiseBtn.classList.remove('hidden');
+    } else {
+        title.textContent = 'Create New Timber Sale Notice';
+        submitBtn.textContent = 'Post Timber Sale';
+    }
+    
+    const cruiseData = project.cruiseData;
+
+    // LOGIC CHANGE: Pre-fill form with cruiseData details if it exists
+    document.getElementById('sale-name').value = cruiseData?.details?.saleName || property.name || '';
+    document.getElementById('sale-county').value = cruiseData?.details?.county || property.county || '';
     document.getElementById('sale-legal-desc').value = property.str || '';
     document.getElementById('sale-acreage').value = property.acreage?.toFixed(2) || '0';
+    document.getElementById('sale-state').value = cruiseData?.details?.state || '';
+    document.getElementById('sale-type').value = cruiseData?.details?.bidMethod || 'lump-sum';
+    document.getElementById('bid-deadline').value = cruiseData?.details?.bidDeadline || '';
+    document.getElementById('sale-harvest-desc').value = cruiseData?.details?.harvestDescription || '';
+    document.getElementById('sale-boundary-desc').value = cruiseData?.details?.boundaryDescription || '';
+    document.getElementById('sale-access-desc').value = cruiseData?.details?.accessDescription || '';
+    document.getElementById('sale-logging-conditions').value = cruiseData?.details?.loggingConditions || 'Good / Mostly Dry';
+    document.getElementById('sale-performance-bond').checked = cruiseData?.details?.performanceBondRequired || false;
+    document.getElementById('sale-performance-bond-amount').value = cruiseData?.details?.performanceBondAmount || '';
+    document.getElementById('sale-guarantee-tally').checked = cruiseData?.details?.guaranteeTally || false;
+    document.getElementById('sale-more-conditions').value = cruiseData?.details?.moreConditions || '';
 
-    initTimberSaleMap(sanitizeGeoJSON(property.geoJSON));
-    setupInventoryTableManager(); 
+    initTimberSaleMap(sanitizeGeoJSON(property.geoJSON), cruiseData?.annotations);
+    setupInventoryTableManager(cruiseData?.inventory);
     
     openModal('timber-sale-form-modal');
-    setTimeout(() => {
-        const map = getMapInstance('timber-sale-map');
-        if (map) {
-            map.invalidateSize();
-        }
-    }, 10);
+    setTimeout(() => getMapInstance('timber-sale-map')?.invalidateSize(), 10);
 }
 
-function setupInventoryTableManager() {
+
+function setupInventoryTableManager(inventory = []) {
     const container = document.getElementById('timber-inventory-stands-container');
     container.innerHTML = ''; 
     
+    if (inventory && inventory.length > 0) {
+        inventory.forEach(stand => addInventoryStand(stand));
+    } else {
+        addInventoryStand();
+    }
+
     document.getElementById('add-inventory-stand-btn').onclick = () => addInventoryStand();
 
     container.addEventListener('click', e => {
         if (e.target.closest('.add-inventory-row-btn')) {
             const standContainer = e.target.closest('.inventory-stand');
             addInventoryRow(standContainer.querySelector('.inventory-table-container'));
+            updateProductDropdowns(standContainer);
         }
         if (e.target.closest('.remove-inventory-row-btn')) {
+            const standContainer = e.target.closest('.inventory-stand');
             e.target.closest('.inventory-row').remove();
+            updateProductDropdowns(standContainer);
         }
          if (e.target.closest('.remove-inventory-stand-btn')) {
             e.target.closest('.inventory-stand').remove();
@@ -1500,20 +1801,64 @@ function setupInventoryTableManager() {
     });
 }
 
-function addInventoryStand() {
+function addInventoryStand(standData = null) {
     const template = document.getElementById('inventory-stand-template');
     const clone = template.content.cloneNode(true);
     const standElement = clone.querySelector('.inventory-stand');
+    const tableContainer = standElement.querySelector('.inventory-table-container');
+    const standNameSelect = standElement.querySelector('.inventory-stand-name');
+
+    updateInventoryStandDropdowns(); 
+
+    if (standData) {
+        standNameSelect.value = standData.name || '';
+        if (standData.products && standData.products.length > 0) {
+            standData.products.forEach(product => addInventoryRow(tableContainer, product));
+        } else {
+             addInventoryRow(tableContainer);
+        }
+    } else {
+        addInventoryRow(tableContainer);
+    }
     
     document.getElementById('timber-inventory-stands-container').appendChild(clone);
-    addInventoryRow(standElement.querySelector('.inventory-table-container'));
+    updateProductDropdowns(standElement);
 }
 
 
-function addInventoryRow(container) {
+function addInventoryRow(container, productData = null) {
     const template = document.getElementById('inventory-row-template');
-    container.appendChild(template.content.cloneNode(true));
+    const clone = template.content.cloneNode(true);
+    const row = clone.querySelector('.inventory-row');
+    if (productData) {
+        row.querySelector('.inventory-product').value = productData.product || '';
+        row.querySelector('.inventory-volume').value = productData.volume || '';
+        row.querySelector('.inventory-unit').value = productData.units || 'Tons';
+        row.querySelector('.inventory-trees').value = productData.trees || '';
+    }
+    container.appendChild(clone);
 }
+
+function updateProductDropdowns(standElement) {
+    const selectedProducts = new Set();
+    standElement.querySelectorAll('.inventory-product').forEach(select => {
+        if (select.value) {
+            selectedProducts.add(select.value);
+        }
+    });
+
+    standElement.querySelectorAll('.inventory-product').forEach(select => {
+        const currentSelection = select.value;
+        select.querySelectorAll('option').forEach(option => {
+            if (option.value && option.value !== currentSelection) {
+                option.disabled = selectedProducts.has(option.value);
+            } else {
+                option.disabled = false;
+            }
+        });
+    });
+}
+
 
 function openSubmitQuoteForm(project) {
     const form = document.getElementById('submit-quote-form');
@@ -1550,7 +1895,7 @@ async function openViewQuotesModal(projectId) {
     list.innerHTML = `<p>Loading quotes...</p>`;
     openModal('view-quotes-modal');
 
-    const quotes = await fetchQuotesForProject(db, project.id, currentUser.uid);
+    const quotes = await fetchQuotesForProject(db, [project.id], currentUser.uid);
 
     if (quotes.length === 0) {
         list.innerHTML = `<p class="text-gray-500">No quotes received yet.</p>`;
@@ -1646,7 +1991,6 @@ function openEditProfileModal() {
         if (detailsDiv) {
             detailsDiv.classList.remove('hidden');
             
-            // Populate based on role
             if (role === 'forester') {
                 document.getElementById('edit-forester-experience').value = currentUser.experience || '';
                 document.getElementById('edit-forester-certs').value = currentUser.certs || '';
@@ -1739,11 +2083,67 @@ async function loginAsDemoUser(role) {
     }
 }
 
-function initializeLogLoadForm() {
+// --- Timbx Logbook & Loads ---
+
+function initializeLogbook() {
+    const viewLoadsBtn = document.getElementById('btn-view-loads');
+    const logNewLoadBtn = document.getElementById('btn-log-new-load');
+    const viewLoadsSection = document.getElementById('logbook-view-loads');
+    const logNewLoadSection = document.getElementById('logbook-log-new');
+
+    if (currentUser && (currentUser.role === 'landowner' || currentUser.role === 'forester')) {
+        logNewLoadBtn.classList.add('hidden');
+    } else {
+        logNewLoadBtn.classList.remove('hidden');
+    }
+
+    const showView = (viewToShow) => {
+        if (viewToShow === 'log') {
+            viewLoadsSection.classList.add('hidden');
+            logNewLoadSection.classList.remove('hidden');
+            logNewLoadBtn.classList.add('bg-green-700', 'text-white');
+            logNewLoadBtn.classList.remove('bg-gray-200', 'text-gray-800');
+            viewLoadsBtn.classList.add('bg-gray-200', 'text-gray-800');
+            viewLoadsBtn.classList.remove('bg-green-700', 'text-white');
+            initializeLogLoadForm();
+        } else { // 'view' is default
+            logNewLoadSection.classList.add('hidden');
+            viewLoadsSection.classList.remove('hidden');
+            viewLoadsBtn.classList.add('bg-green-700', 'text-white');
+            viewLoadsBtn.classList.remove('bg-gray-200', 'text-gray-800');
+            logNewLoadBtn.classList.add('bg-gray-200', 'text-gray-800');
+            logNewLoadBtn.classList.remove('bg-green-700', 'text-white');
+            renderMyLoads();
+        }
+    };
+
+    viewLoadsBtn.addEventListener('click', () => showView('view'));
+    logNewLoadBtn.addEventListener('click', () => showView('log'));
+
+    showView('view');
+}
+
+
+async function initializeLogLoadForm() {
     const now = new Date();
     now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
     document.getElementById('load-date').value = now.toISOString().slice(0, 16);
-    document.getElementById('load-job').innerHTML = `<option value="">Select an Active Job</option>`;
+    
+    const jobSelect = document.getElementById('load-job');
+    jobSelect.innerHTML = `<option value="">Loading active jobs...</option>`;
+
+    if (!currentUser) return;
+
+    const activeProjects = await fetchActiveProjectsForUser(db, currentUser);
+    
+    if (activeProjects.length > 0) {
+        jobSelect.innerHTML = `<option value="">Select an Active Job</option>`;
+        activeProjects.forEach(project => {
+            jobSelect.innerHTML += `<option value="${project.id}">${project.propertyName}</option>`;
+        });
+    } else {
+        jobSelect.innerHTML = `<option value="">No active jobs found</option>`;
+    }
 }
 
 function calculateNetWeight() {
@@ -1755,10 +2155,287 @@ function calculateNetWeight() {
 
 async function handleLogLoadSubmit(event) {
     event.preventDefault();
-    alert("Haul ticket submitted!");
-    event.target.reset();
-    initializeLogLoadForm();
+    if (!currentUser) {
+        alert("You must be logged in to submit a ticket.");
+        return;
+    }
+    
+    const submitButton = event.target.querySelector('button[type="submit"]');
+    submitButton.disabled = true;
+    submitButton.textContent = 'Submitting...';
+
+    try {
+        const ticketData = {
+            submitterId: currentUser.uid,
+            submitterName: currentUser.username,
+            jobId: document.getElementById('load-job').value,
+            dateTime: document.getElementById('load-date').value,
+            mill: document.getElementById('load-mill').value,
+            product: document.getElementById('load-product').value,
+            grossWeight: parseFloat(document.getElementById('load-gross-weight').value) || 0,
+            tareWeight: parseFloat(document.getElementById('load-tare-weight').value) || 0,
+            netTons: parseFloat(document.getElementById('load-net-weight').textContent) || 0,
+            ticketImageUrl: null 
+        };
+
+        if (!ticketData.jobId) {
+            alert("Please select a job.");
+            submitButton.disabled = false;
+            submitButton.textContent = 'Submit Ticket';
+            return;
+        }
+        
+        const project = allProjects.find(p => p.id === ticketData.jobId);
+        if(project) {
+            ticketData.ownerId = project.ownerId;
+            ticketData.supplierId = project.supplierId;
+        }
+
+
+        await saveHaulTicket(db, ticketData);
+
+        alert("Haul ticket submitted successfully!");
+        event.target.reset();
+        
+        document.getElementById('btn-view-loads').click();
+
+    } catch (error) {
+        console.error("Error submitting haul ticket:", error);
+        alert("There was an error submitting your ticket. Please try again.");
+    } finally {
+        submitButton.disabled = false;
+        submitButton.textContent = 'Submit Ticket';
+    }
 }
+
+async function renderMyLoads() {
+    if (!currentUser) return;
+    const container = document.getElementById('my-loads-container');
+    const filter = document.getElementById('loads-job-filter');
+    container.innerHTML = '<p class="text-center text-gray-500 p-4">Loading your submitted loads...</p>';
+
+    const allUserTickets = await fetchHaulTicketsForUser(db, currentUser);
+    
+    if (!allUserTickets || allUserTickets.length === 0) {
+        container.innerHTML = '<p class="text-center text-gray-500 p-4">No loads found for your account.</p>';
+        document.getElementById('total-net-tons').textContent = '0.00';
+        filter.innerHTML = '<option value="all">All Active Jobs</option>';
+        return;
+    }
+
+    const uniqueJobIds = [...new Set(allUserTickets.map(t => t.jobId))];
+    filter.innerHTML = '<option value="all">All Active Jobs</option>';
+    uniqueJobIds.forEach(jobId => {
+        const project = allProjects.find(p => p.id === jobId);
+        if (project) {
+            filter.innerHTML += `<option value="${jobId}">${project.propertyName}</option>`;
+        }
+    });
+
+    filter.onchange = () => displayFilteredLoads(allUserTickets);
+    displayFilteredLoads(allUserTickets);
+}
+
+function displayFilteredLoads(tickets) {
+    const container = document.getElementById('my-loads-container');
+    const filterValue = document.getElementById('loads-job-filter').value;
+
+    const filteredTickets = filterValue === 'all' 
+        ? tickets 
+        : tickets.filter(t => t.jobId === filterValue);
+
+    filteredTickets.sort((a, b) => new Date(b.dateTime) - new Date(a.dateTime));
+
+    if (filteredTickets.length === 0) {
+        container.innerHTML = '<p class="text-center text-gray-500 p-4">No loads found for the selected job.</p>';
+        document.getElementById('total-net-tons').textContent = '0.00';
+        return;
+    }
+    
+    let totalTons = 0;
+    const showAdminControls = currentUser && currentUser.role === 'timber-buyer';
+
+    const loadsHTML = filteredTickets.map(load => {
+        totalTons += load.netTons;
+        const project = allProjects.find(p => p.id === load.jobId);
+        const loadDate = new Date(load.dateTime).toLocaleDateString();
+        const loadTime = new Date(load.dateTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+        let adminButtonsHTML = '';
+        if (showAdminControls) {
+            adminButtonsHTML = `
+                <div class="flex gap-2 justify-end mt-2 md:mt-0">
+                    <button class="edit-load-btn text-xs bg-amber-100 text-amber-800 font-semibold py-1 px-3 rounded-md hover:bg-amber-200" data-ticket-id="${load.id}">Edit</button>
+                    <button class="delete-load-btn text-xs bg-red-100 text-red-800 font-semibold py-1 px-3 rounded-md hover:bg-red-200" data-ticket-id="${load.id}">Delete</button>
+                </div>
+            `;
+        }
+
+        return `
+            <div class="bg-white p-4 rounded-lg shadow-sm border">
+                <div class="grid grid-cols-1 md:grid-cols-5 gap-4 items-start">
+                    <div class="md:col-span-2">
+                        <p class="font-bold text-gray-800">${load.product}</p>
+                        <p class="text-sm text-gray-500">To: ${load.mill}</p>
+                        <p class="text-xs text-gray-500 mt-1">Job: ${project?.propertyName || 'N/A'}</p>
+                        <p class="text-xs text-gray-500">Submitted By: <span class="font-medium">${load.submitterName}</span></p>
+                    </div>
+                    <div class="text-left md:text-center">
+                        <p class="text-xs text-gray-500">Date & Time</p>
+                        <p class="font-semibold">${loadDate} ${loadTime}</p>
+                    </div>
+                    <div class="text-left md:text-center">
+                        <p class="text-xs text-gray-500">Net Tons</p>
+                        <p class="font-bold text-lg text-green-700">${load.netTons.toFixed(2)}</p>
+                    </div>
+                    <div class="md:col-span-1 md:text-right">
+                        <a href="${load.ticketImageUrl || '#'}" target="_blank" class="text-blue-600 hover:underline text-sm font-semibold ${!load.ticketImageUrl ? 'opacity-50 pointer-events-none' : ''}">
+                            View Ticket
+                        </a>
+                        ${adminButtonsHTML}
+                    </div>
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    container.innerHTML = loadsHTML;
+    document.getElementById('total-net-tons').textContent = totalTons.toFixed(2);
+}
+
+// --- Rate Sheet Functions ---
+function openRateSheetModal(projectId) {
+    const project = allProjects.find(p => p.id === projectId);
+    if (!project) {
+        alert("Could not find project details.");
+        return;
+    }
+    
+    const form = document.getElementById('rate-sheet-form');
+    form.reset();
+    document.getElementById('rate-sheet-project-id').value = projectId;
+    document.getElementById('rate-sheet-title').textContent = `Manage Rates for: ${project.propertyName}`;
+
+    const container = document.getElementById('rate-sets-container');
+    container.innerHTML = '';
+    
+    renderRateSets(project.rateSets || []);
+
+    document.getElementById('add-rate-set-btn').onclick = () => addRateSet();
+    container.addEventListener('click', (e) => {
+        if (e.target.matches('.remove-rate-set-btn')) {
+            e.target.closest('.rate-set').remove();
+        }
+        if (e.target.matches('.add-rate-row-btn')) {
+            const category = e.target.dataset.category;
+            const rowsContainer = e.target.previousElementSibling;
+            addRateRow(rowsContainer, { product: '', price: '' }, category);
+        }
+        if (e.target.matches('.remove-rate-row-btn')) {
+            e.target.closest('.rate-row').remove();
+        }
+    });
+
+    openModal('rate-sheet-modal');
+}
+
+function renderRateSets(rateSets = []) {
+    const container = document.getElementById('rate-sets-container');
+    container.innerHTML = '';
+    if (rateSets.length === 0) {
+        addRateSet(); 
+    } else {
+        rateSets.sort((a, b) => new Date(a.effectiveDate) - new Date(b.effectiveDate));
+        rateSets.forEach(set => addRateSet(set));
+    }
+}
+
+function addRateSet(setData = null) {
+    const container = document.getElementById('rate-sets-container');
+    const template = document.getElementById('rate-set-template');
+    const clone = template.content.cloneNode(true);
+    const rateSetElement = clone.querySelector('.rate-set');
+
+    if (setData) {
+        rateSetElement.querySelector('.rate-set-effective-date').value = setData.effectiveDate || '';
+        const categories = ['mill', 'stumpage', 'logging'];
+        categories.forEach(category => {
+            const rowsContainer = rateSetElement.querySelector(`.add-rate-row-btn[data-category="${category}"]`).previousElementSibling;
+            (setData[category] || []).forEach(rate => addRateRow(rowsContainer, rate, category));
+        });
+    } else {
+         rateSetElement.querySelector('.rate-set-effective-date').valueAsDate = new Date();
+    }
+
+    container.appendChild(clone);
+}
+
+function addRateRow(container, rowData, category) {
+    const template = document.getElementById('rate-row-template');
+    const clone = template.content.cloneNode(true);
+    const rowElement = clone.querySelector('.rate-row');
+    rowElement.querySelector('.rate-product').value = rowData.product || '';
+    rowElement.querySelector('.rate-price').value = rowData.price || '';
+    container.appendChild(clone);
+}
+
+async function handleSaveRateSheet(event) {
+    event.preventDefault();
+    const projectId = document.getElementById('rate-sheet-project-id').value;
+    const rateSetElements = document.querySelectorAll('#rate-sets-container .rate-set');
+    
+    const rateSets = [];
+    let isValid = true;
+
+    rateSetElements.forEach(setElement => {
+        const effectiveDate = setElement.querySelector('.rate-set-effective-date').value;
+        if (!effectiveDate) {
+            isValid = false;
+        }
+
+        const rateSet = { effectiveDate, mill: [], stumpage: [], logging: [] };
+
+        const categories = ['mill', 'stumpage', 'logging'];
+        categories.forEach(category => {
+            const rows = setElement.querySelectorAll(`.add-rate-row-btn[data-category="${category}"]`).previousElementSibling.querySelectorAll('.rate-row');
+            rows.forEach(row => {
+                const product = row.querySelector('.rate-product').value;
+                const price = parseFloat(row.querySelector('.rate-price').value);
+                if (product && !isNaN(price)) {
+                    rateSet[category].push({ product, price });
+                }
+            });
+        });
+        rateSets.push(rateSet);
+    });
+
+    if (!isValid) {
+        alert("Please ensure every rate set has an effective date.");
+        return;
+    }
+    
+    const submitButton = event.target.querySelector('button[type="submit"]');
+    submitButton.disabled = true;
+    submitButton.textContent = 'Saving...';
+
+    try {
+        await saveProjectRates(db, projectId, rateSets);
+        const projectIndex = allProjects.findIndex(p => p.id === projectId);
+        if (projectIndex > -1) {
+            allProjects[projectIndex].rateSets = rateSets;
+        }
+        alert("Project rates saved successfully!");
+        closeModal('rate-sheet-modal');
+        renderMyProjects();
+    } catch (error) {
+        console.error("Error saving rates:", error);
+        alert("Could not save project rates. Please try again.");
+    } finally {
+        submitButton.disabled = false;
+        submitButton.textContent = 'Save All Rates';
+    }
+}
+
 
 // Helper to populate checkbox grids for signup/edit profile
 function populateCheckboxes(containerId, items, name, checkedItems = []) {

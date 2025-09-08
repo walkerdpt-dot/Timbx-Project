@@ -6,6 +6,12 @@ export let myPropertiesLayerGroup = null; // Layer group for property pins
 let locationMarker = null; // Shared marker for signup and edit profile
 let serviceAreaCircle = null; // Shared circle for edit profile
 
+// UI ENHANCEMENT: Define a palette of high-contrast, distinct colors for drawing.
+const DRAW_COLOR_PALETTE = [
+    '#E6194B', '#3cb44b', '#4363d8', '#f58231', '#911eb4', 
+    '#42d4f4', '#f032e6', '#bfef45', '#fabed4', '#469990'
+];
+
 function createBaseMap(containerId, mapOptions = {}, view = [34.7465, -92.2896, 7]) {
     if (mapInstances.has(containerId)) {
         const oldMap = mapInstances.get(containerId);
@@ -33,14 +39,23 @@ export function addLayerControls(map) {
     const satellite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
         attribution: 'Tiles &copy; Esri'
     });
-    const hybridGroup = L.layerGroup([
+    const topo = L.tileLayer('https://basemap.nationalmap.gov/arcgis/rest/services/USGSTopo/MapServer/tile/{z}/{y}/{x}', {
+        attribution: 'Tiles courtesy of the <a href="https://usgs.gov/">U.S. Geological Survey</a>'
+    });
+
+    // BUG FIX: Re-create the Hybrid layer group with labels and satellite imagery.
+    const hybrid = L.layerGroup([
         satellite,
-        L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', { pane: 'overlayPane' }),
-        L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}', { pane: 'overlayPane' })
+        L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}')
     ]);
     
-    const baseMaps = { "Hybrid": hybridGroup, "Streets": streets, "Satellite": satellite };
-    hybridGroup.addTo(map); // Set Hybrid as the default
+    const baseMaps = { 
+        "Hybrid": hybrid,
+        "Satellite": satellite,
+        "Streets": streets,
+        "Topographic": topo
+    };
+    hybrid.addTo(map); // BUG FIX: Set Hybrid as the default view.
     L.control.layers(baseMaps, null, { position: 'topright' }).addTo(map);
 }
 
@@ -130,7 +145,8 @@ export function getProjectAnnotationsAsGeoJSON() {
         const feature = item.layer.toGeoJSON();
         feature.properties = {
             label: item.label,
-            type: item.type
+            type: item.type,
+            color: item.layer.options.color // Save the color
         };
         return feature;
     });
@@ -141,11 +157,12 @@ export function getProjectAnnotationsAsGeoJSON() {
     };
 }
 
-export function initTimberSaleMap(propertyGeoJSON) {
+export function initTimberSaleMap(propertyGeoJSON, existingAnnotations) {
     const map = createBaseMap('timber-sale-map');
     if (!map) return null;
 
     saleMapFeatures = []; 
+    const drawnItems = new L.FeatureGroup().addTo(map);
 
     if (propertyGeoJSON?.geometry?.coordinates) {
         const propertyLayer = L.geoJSON(propertyGeoJSON, {
@@ -157,14 +174,41 @@ export function initTimberSaleMap(propertyGeoJSON) {
         }
     }
 
-    const drawnItems = new L.FeatureGroup().addTo(map);
+    if (existingAnnotations) {
+        let parsedAnnotations = existingAnnotations;
+        if (typeof parsedAnnotations === 'string') {
+            try {
+                parsedAnnotations = JSON.parse(parsedAnnotations);
+            } catch (e) {
+                console.error("Failed to parse annotations JSON:", e);
+                parsedAnnotations = null;
+            }
+        }
+
+        if (parsedAnnotations) {
+            L.geoJSON(parsedAnnotations, {
+                onEachFeature: (feature, layer) => {
+                    const { label, type, color } = feature.properties;
+                    if (typeof layer.setStyle === 'function') {
+                        layer.setStyle({ color: color || DRAW_COLOR_PALETTE[saleMapFeatures.length % DRAW_COLOR_PALETTE.length] });
+                    }
+                    if (label) {
+                       layer.bindTooltip(label, { permanent: true, direction: 'center', className: 'map-label' }).openTooltip();
+                    }
+                    saleMapFeatures.push({ layer, type, label });
+                    drawnItems.addLayer(layer);
+                }
+            });
+        }
+    }
+
 
     const drawControl = new L.Control.Draw({
         edit: { featureGroup: drawnItems },
         draw: {
-            polygon: { shapeOptions: { color: '#007bff' } },      // Harvest Area - Blue
-            rectangle: { shapeOptions: { color: '#ffc107' } },    // SMZ - Yellow
-            polyline: { shapeOptions: { color: '#6c757d' } },     // Road - Grey
+            polygon: { shapeOptions: { color: DRAW_COLOR_PALETTE[0], weight: 3, opacity: 1 } },
+            rectangle: { shapeOptions: { color: DRAW_COLOR_PALETTE[1], weight: 3, opacity: 1 } },
+            polyline: { shapeOptions: { color: DRAW_COLOR_PALETTE[2], weight: 4, opacity: 1 } },
             marker: {},
             circle: false,
             circlemarker: false
@@ -175,6 +219,12 @@ export function initTimberSaleMap(propertyGeoJSON) {
         const layer = event.layer;
         const type = event.layerType;
         
+        const color = DRAW_COLOR_PALETTE[saleMapFeatures.length % DRAW_COLOR_PALETTE.length];
+        
+        if (typeof layer.setStyle === 'function') {
+            layer.setStyle({ color: color });
+        }
+
         let featureType = 'Feature';
         if (type === 'polygon') featureType = 'Harvest Area';
         if (type === 'rectangle') featureType = 'SMZ';
@@ -204,7 +254,7 @@ export function initTimberSaleMap(propertyGeoJSON) {
     return map;
 }
 
-function updateInventoryStandDropdowns() {
+export function updateInventoryStandDropdowns() {
     const harvestAreas = saleMapFeatures
         .filter(item => item.type === 'Harvest Area' || item.type === 'SMZ')
         .map(item => item.label);
