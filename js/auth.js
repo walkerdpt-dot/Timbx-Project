@@ -1,23 +1,26 @@
-// js/auth.js
-import { 
-    getAuth, 
-    onAuthStateChanged, 
-    createUserWithEmailAndPassword, 
-    signInWithEmailAndPassword, 
-    signOut 
+// js/auth.js 
+import {  
+    getAuth,  
+    onAuthStateChanged,  
+    createUserWithEmailAndPassword,  
+    signInWithEmailAndPassword,  
+    signOut  
 } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
 import { createUserProfile, getUserProfile } from './firestore.js';
 
-export function initializeAuth(app, db, onUserStatusChange) {
+export function initializeAuth(app, db, onUserStatusChange, onInitialLoadComplete) {
     const auth = getAuth(app);
 
     onAuthStateChanged(auth, async (user) => {
         if (user) {
             const userProfile = await getUserProfile(db, user.uid);
-            onUserStatusChange(userProfile);
+            await onUserStatusChange(userProfile);
         } else {
-            onUserStatusChange(null);
+            await onUserStatusChange(null);
         }
+        // This function (handleNavigation) is now called here to guarantee
+        // that all user data is loaded BEFORE the app tries to render a page.
+        onInitialLoadComplete();
     });
 
     return auth;
@@ -56,10 +59,10 @@ export async function handleSignup(auth, db, optionalData) {
 
     try {
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-        const user = userCredential.user;
-        
-        await createUserProfile(db, user, username, role, optionalData);
-        
+        const user = userCredential.user; 
+         
+        await createUserProfile(db, user, username, role, optionalData); 
+         
         messageDiv.classList.add('hidden');
         messageDiv.textContent = '';
         alert("Signup successful! Please log in.");

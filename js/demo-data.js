@@ -10,7 +10,7 @@ export const demoProfiles = [
         bio: 'SAF Certified Forester with 25 years of experience in the Ouachita Mountains. Specializing in sustainable pine management and wildlife habitat improvement.',
         serviceArea: 'Western Arkansas, Eastern Oklahoma',
         certifications: 'SAF Certified, AR Registered Forester #101',
-        services: ['valuation', 'management', 'sale-admin', 'burning'],
+        services: ['Timber Cruising & Appraisal', 'Harvest Management', 'Prescribed Burning'],
         location: { lat: 34.58, lng: -93.05 }, // Hot Springs, AR
         serviceRadius: 120
     },
@@ -22,51 +22,51 @@ export const demoProfiles = [
         bio: 'We provide comprehensive forest management services for private landowners throughout the Mississippi Delta region.',
         serviceArea: 'Eastern Arkansas, Western Mississippi',
         certifications: 'MS Registered Forester #205',
-        services: ['valuation', 'management', 'reforestation'],
+        services: ['Timber Cruising & Appraisal', 'Forest Management Plans', 'Reforestation Planning'],
         location: { lat: 34.91, lng: -90.35 }, // Helena, AR
         serviceRadius: 90
     },
     {
         uid: 'demo-buyer-1',
         username: 'Delta Pine Products',
-        role: 'buyer',
+        role: 'timber-buyer',
         email: 'dpp@demo.com',
         bio: 'Large-scale pine sawtimber and pulpwood buyer for mills across the Southeast. We offer competitive pricing and fast payment.',
         serviceArea: 'AR, LA, MS, TX',
-        products: ['pine-sawtimber', 'pine-pulpwood'],
+        products: ['Pine Sawtimber', 'Pine Pulpwood'],
         location: { lat: 33.22, lng: -92.66 }, // El Dorado, AR
         serviceRadius: 200
     },
     {
         uid: 'demo-buyer-2',
         username: 'Ozark Hardwood Inc.',
-        role: 'buyer',
+        role: 'timber-buyer',
         email: 'ohi@demo.com',
         bio: 'Specialty buyer of high-quality white oak, red oak, and walnut sawlogs. We purchase standing timber and logs delivered to our mill.',
         serviceArea: 'Northern Arkansas, Southern Missouri',
-        products: ['hw-sawlogs'],
+        products: ['Hardwood Sawtimber'],
         location: { lat: 36.37, lng: -92.38 }, // Mountain Home, AR
         serviceRadius: 150
     },
     {
         uid: 'demo-contractor-1',
         username: 'Ridge Runner Logging',
-        role: 'contractor',
+        role: 'logging-contractor', // CORRECTED from 'contractor'
         email: 'rrl@demo.com',
         bio: 'Professional and efficient logging services. We are fully insured and use modern, low-impact equipment.',
         serviceArea: 'Central Arkansas',
-        services: ['logging'],
+        services: ['Timber Harvesting', 'Log Hauling'],
         location: { lat: 34.72, lng: -92.60 }, // Benton, AR
         serviceRadius: 80
     },
     {
         uid: 'demo-contractor-2',
         username: 'Southern Reforestation',
-        role: 'contractor',
+        role: 'service-provider', // CORRECTED from 'contractor'
         email: 'sr@demo.com',
         bio: 'Complete reforestation services, including site prep, herbicide application, and machine planting. We guarantee high survival rates.',
         serviceArea: 'Statewide',
-        services: ['mulching', 'herbicide', 'planting'],
+        services: ['Mechanical Site Prep', 'Chemical Site Prep', 'Machine Planting'],
         location: { lat: 34.23, lng: -92.01 }, // Pine Bluff, AR
         serviceRadius: 180
     }

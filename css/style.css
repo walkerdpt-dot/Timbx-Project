@@ -8,14 +8,14 @@ body {
 }
 
 /* =================================================================== */
-/* Navigation Bar Layout - FINAL VERSION                               */
+/* Navigation Bar Layout                                               */
 /* =================================================================== */
 
 .nav-container {
     position: relative;
     display: flex;
     align-items: center;
-    justify-content: center; /* This will center the .nav-links child */
+    justify-content: center;
     height: 40px; 
 }
 
@@ -23,11 +23,11 @@ body {
     display: flex;
     align-items: center;
     gap: 1rem;
-    white-space: nowrap; /* Prevents links from wrapping */
+    white-space: nowrap;
 }
 
 .nav-auth {
-    position: absolute; /* Decouples the auth block from the links */
+    position: absolute;
     right: 0;
     top: 50%;
     transform: translateY(-50%);
@@ -35,13 +35,6 @@ body {
     align-items: center;
 }
 
-/* This creates an invisible placeholder on the left to balance the nav-auth block */
-.nav-left-placeholder {
-    width: 300px; /* Adjust this width if needed */
-    flex-shrink: 0;
-}
-
-/* This rule properly hides the user display when logged out */
 #user-display.hidden {
     display: none;
 }
@@ -59,7 +52,11 @@ body {
     height: 400px;
 }
 
-#global-map, #property-map, #forester-signup-map, #buyer-signup-map, #contractor-signup-map, #edit-profile-map, #profile-map-display, #my-properties-map {
+#timber-sale-map {
+    height: 500px;
+}
+
+#global-map, #property-map, #forester-signup-map, #buyer-signup-map, #contractor-signup-map, #edit-profile-map, #profile-map-display, #my-properties-map, #timber-sale-map {
     border-radius: 0.5rem;
     border: 1px solid #d1d5db;
 }
@@ -91,6 +88,7 @@ body {
 .full-page-section {
     overflow-y: auto;
     padding: 2rem 0;
+    align-items: flex-start;
 }
 
 .modal-content {
@@ -107,7 +105,16 @@ body {
 
 .full-page-section .modal-content {
     max-width: 900px;
+    margin-top: 2rem;
+    margin-bottom: 2rem;
 }
+
+/* This rule forces the property and timber sale forms to take up more space on the screen. */
+#property-form-modal .modal-content, #timber-sale-form-modal .modal-content {
+    max-width: 900px !important;
+    width: 95%;
+}
+
 
 .close-button {
     position: absolute;
@@ -136,47 +143,14 @@ body {
     border: 1px solid rgba(0,0,0,0.2);
 }
 
-.map-search-icon {
-    position: absolute;
-    top: 10px;
-    left: 10px;
-    z-index: 401;
-    background: white;
+.map-label {
+    background-color: rgba(255, 255, 255, 0.8);
+    border: 1px solid #333;
     border-radius: 4px;
-    box-shadow: 0 1px 5px rgba(0,0,0,0.65);
-    cursor: pointer;
-    width: 34px;
-    height: 34px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.map-search-icon:hover {
-    background-color: #f4f4f4;
-}
-
-.map-search-icon svg {
-    width: 20px;
-    height: 20px;
-    color: #333;
-}
-
-#geocoder-container .leaflet-control-geocoder {
-    box-shadow: none;
-}
-
-#geocoder-container .leaflet-control-geocoder-form input {
-    width: 100%;
-    height: 40px;
-    font-size: 1rem;
-    padding: 0 10px;
-    border: 1px solid #ccc;
-    border-radius: 4px;
-}
-
-#geocoder-container .leaflet-control-geocoder-icon {
-    display: none;
+    padding: 2px 5px;
+    font-weight: bold;
+    font-size: 12px;
+    white-space: nowrap;
 }
 
 /* =================================================================== */
@@ -232,7 +206,91 @@ body {
     z-index: 10;
 }
 
-main.container {
-  position: relative;
-  z-index: 10;
+/* =================================================================== */
+/* Loading Overlay Styles                                              */
+/* =================================================================== */
+
+#loading-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(255, 255, 255, 0.8);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 9999;
+    backdrop-filter: blur(4px);
+    transition: opacity 0.3s;
+}
+
+#loading-overlay.hidden {
+    opacity: 0;
+    pointer-events: none;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+.spinner {
+    border: 5px solid rgba(0, 0, 0, 0.1);
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    border-left-color: #059669;
+    animation: spin 1s ease-in-out infinite;
+}
+
+
+/* =================================================================== */
+/* NEW: Map Marker Styles                                              */
+/* =================================================================== */
+.pointed-circle-marker {
+    background-color: #4363d8; /* Default color */
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    border: 2px solid white;
+    box-shadow: 0 0 5px rgba(0,0,0,0.5);
+    position: relative;
+}
+
+.pointed-circle-marker::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 100%;
+    transform: translateX(-50%);
+    width: 0;
+    height: 0;
+    border-left: 6px solid transparent;
+    border-right: 6px solid transparent;
+    border-top: 10px solid; /* Color will be inherited */
+    border-top-color: inherit; /* Set in JS */
+}
+
+/* This is the smaller version for the legend */
+.legend-marker {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    position: relative;
+    display: inline-block;
+    vertical-align: middle;
+}
+
+.legend-marker::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 100%;
+    transform: translateX(-50%);
+    width: 0;
+    height: 0;
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+    border-top: 6px solid;
+    border-top-color: inherit;
 }

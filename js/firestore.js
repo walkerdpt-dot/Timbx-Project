@@ -1,310 +1,247 @@
 // js/firestore.js
-import { 
-    getFirestore, doc, getDoc, setDoc, updateDoc, collection, getDocs, 
-    addDoc, deleteDoc, query, where, serverTimestamp, writeBatch
+import {
+    doc, getDoc, setDoc, addDoc, updateDoc, deleteDoc, 
+    collection, getDocs, query, where, writeBatch, serverTimestamp 
 } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
+import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-functions.js";
+import { app } from './state.js'; // ADDED: Import the app instance from the state
+
+// --- Cloud Function Callers ---
+export async function callAcceptQuote(quoteId, projectId) {
+    const functions = getFunctions(app); // Use the imported app instance
+    const acceptQuoteFunction = httpsCallable(functions, 'acceptQuote');
+    try {
+        const result = await acceptQuoteFunction({ quoteId, projectId });
+        return result.data; // e.g., { success: true, message: "..." }
+    } catch (error) {
+        console.error("Cloud Function Error:", error);
+        // Re-throw the error so the UI can catch it
+        throw error;
+    }
+}
+
+
+// --- User Profile Functions ---
 
 export async function createUserProfile(db, user, username, role, optionalData) {
-    try {
-        await setDoc(doc(db, "users", user.uid), {
-            uid: user.uid,
-            email: user.email,
-            username: username,
-            role: role,
-            createdAt: serverTimestamp(),
-            rating: 0,
-            reviewCount: 0,
-            completedTransactions: 0,
-            ...optionalData
-        });
-        return true;
-    } catch (e) {
-        console.error("Error adding document: ", e);
-        return false;
-    }
+    const userRef = doc(db, "users", user.uid);
+    const profileData = {
+        uid: user.uid,
+        email: user.email,
+        username: username,
+        role: role,
+        createdAt: serverTimestamp(),
+        rating: 0,
+        reviewCount: 0,
+        completedTransactions: 0,
+        ...optionalData
+    };
+    await setDoc(userRef, profileData);
 }
 
 export async function getUserProfile(db, uid) {
-    const docRef = doc(db, "users", uid);
-    const docSnap = await getDoc(docRef);
-    if (docSnap.exists()) {
-        return { uid, ...docSnap.data() };
-    } else {
-        return null;
-    }
-}
-
-export async function getUserProfileById(db, uid) {
-    if (!uid) return null;
     const userRef = doc(db, "users", uid);
     const userSnap = await getDoc(userRef);
     return userSnap.exists() ? { id: userSnap.id, ...userSnap.data() } : null;
 }
 
-export async function fetchProperties(db) {
-    const propertiesCol = collection(db, 'properties');
-    const propertySnapshot = await getDocs(propertiesCol);
-    return propertySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+export async function updateUserProfile(db, uid, data) {
+    const userRef = doc(db, "users", uid);
+    await updateDoc(userRef, data);
 }
 
-export async function fetchProjects(db) {
-    const projectsCol = collection(db, 'projects');
-    const projectSnapshot = await getDocs(projectsCol);
-    return projectSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+export async function getUserProfileById(db, userId) {
+    if (!userId) return null;
+    const userRef = doc(db, "users", userId);
+    const docSnap = await getDoc(userRef);
+    if (docSnap.exists()) {
+        return { id: docSnap.id, ...docSnap.data() };
+    }
+    return null;
 }
+
+// --- Data Fetching Functions ---
 
 export async function fetchProfessionalProfiles(db) {
-    const usersRef = collection(db, "users");
-    const q = query(usersRef, where("role", "!=", "landowner"));
+    const q = query(collection(db, "users"), where("role", "!=", "landowner"));
     const querySnapshot = await getDocs(q);
-    const profiles = [];
-    querySnapshot.forEach((doc) => {
-        profiles.push({ id: doc.id, ...doc.data() });
-    });
-    return profiles;
+    return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 }
 
-export async function saveNewProperty(db, currentUser, geoJSON, propertyData) {
-    if (!currentUser || !currentUser.uid) {
-        throw new Error("You must be logged in to save a property.");
-    }
-    const propertyPayload = {
-        ...propertyData,
-        ownerId: currentUser.uid,
-        geoJSON: JSON.stringify(geoJSON),
-        createdAt: serverTimestamp()
-    };
-    const docRef = await addDoc(collection(db, "properties"), propertyPayload);
-    return { id: docRef.id, ...propertyPayload, geoJSON: geoJSON };
+export async function fetchTimberSales(db) {
+    const querySnapshot = await getDocs(collection(db, "timberSales"));
+    return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 }
 
-export async function saveTimberSale(db, saleData) {
-    if (!saleData.ownerId) {
-        throw new Error("Cannot save sale without an owner.");
-    }
-    
-    if (saleData.saleMapGeoJSON && typeof saleData.saleMapGeoJSON === 'object') {
-        saleData.saleMapGeoJSON = JSON.stringify(saleData.saleMapGeoJSON);
-    }
-
-    const payload = {
-        ...saleData,
-        createdAt: serverTimestamp(),
-        status: 'open'
-    };
-
-    const docRef = await addDoc(collection(db, "timberSales"), payload);
-    return { id: docRef.id, ...payload };
+export async function getProjectsForCurrentUser(db, userId) {
+    const projectsRef = collection(db, "projects");
+    const projectsQuery = query(projectsRef, where("involvedUsers", "array-contains", userId));
+    const snapshot = await getDocs(projectsQuery);
+    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 }
 
 
-export async function saveNewProject(db, projectData) {
-    if (!projectData.ownerId) {
-        throw new Error("Cannot save project without an owner.");
-    }
-    
-    const payload = { ...projectData };
-    if (payload.geoJSON && typeof payload.geoJSON === 'object') {
-        payload.geoJSON = JSON.stringify(payload.geoJSON);
-    }
-    if (payload.annotations && typeof payload.annotations === 'object') {
-        payload.annotations = JSON.stringify(payload.annotations);
-    }
-
-    const docRef = await addDoc(collection(db, "projects"), payload);
-    return { id: docRef.id, ...projectData };
+export async function fetchInquiriesForUser(db, userId) {
+    const q = query(collection(db, "inquiries"), where("involvedUsers", "array-contains", userId));
+    const querySnapshot = await getDocs(q);
+    return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 }
 
-export async function createOrGetInquiryProject(db, currentUser, property, services) {
-    const projectsRef = collection(db, 'projects');
-    const q = query(projectsRef, 
-        where("propertyId", "==", property.id), 
-        where("status", "==", "inquiry")
+export async function fetchActiveProjectsForUser(db, user) {
+    if (!user) return [];
+    const allUserProjects = await getProjectsForCurrentUser(db, user.uid);
+    return allUserProjects.filter(p => p.status === 'harvest_in_progress');
+}
+
+export async function fetchQuotesForProject(db, projectIds, landownerId) {
+    if (!projectIds || projectIds.length === 0) return [];
+     
+    const q = query(
+        collection(db, "quotes"),
+        where("projectId", "in", projectIds),
+        where("landownerId", "==", landownerId)
     );
-
+     
     const querySnapshot = await getDocs(q);
-    if (!querySnapshot.empty) {
-        const existingProjectDoc = querySnapshot.docs[0];
-        return { id: existingProjectDoc.id, ...existingProjectDoc.data() };
+    return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+}
+
+export async function fetchHaulTicketsForUser(db, user) {
+    if (!user) return [];
+     
+    let ticketsQuery;
+    const ticketsRef = collection(db, 'haulTickets');
+
+    if (user.role === 'landowner') {
+        ticketsQuery = query(ticketsRef, where('ownerId', '==', user.uid));
+    } else if (user.role === 'timber-buyer') {
+        ticketsQuery = query(ticketsRef, where('supplierId', '==', user.uid));
+    } else {
+        ticketsQuery = query(ticketsRef, where('submitterId', '==', user.uid));
     }
 
-    const projectData = {
-        ownerId: currentUser.uid,
-        ownerName: currentUser.username,
-        propertyId: property.id,
-        propertyName: property.name,
-        status: 'inquiry',
-        servicesSought: services,
-        createdAt: serverTimestamp(),
-        geoJSON: property.geoJSON
-    };
-
-    const docRef = await addDoc(collection(db, "projects"), projectData);
-    return { id: docRef.id, ...projectData };
+    try {
+        const snapshot = await getDocs(ticketsQuery);
+        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    } catch (error) {
+        console.error("Error fetching haul tickets:", error);
+        return [];
+    }
 }
 
-export async function updateProperty(db, propertyId, geoJSON, propertyData) {
-    const propertyRef = doc(db, "properties", propertyId);
-    await updateDoc(propertyRef, {
+
+// --- Property Functions ---
+
+export async function getPropertyById(db, propertyId) {
+    const docRef = doc(db, "properties", propertyId);
+    const docSnap = await getDoc(docRef);
+    return docSnap.exists() ? { id: docSnap.id, ...docSnap.data() } : null;
+}
+
+export async function getPropertiesForCurrentUser(db, userId) {
+    const q = query(collection(db, "properties"), where("ownerId", "==", userId));
+    const querySnapshot = await getDocs(q);
+    return querySnapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+}
+
+
+export async function saveNewProperty(db, user, boundary, propertyData) {
+    const docRef = await addDoc(collection(db, "properties"), {
         ...propertyData,
-        geoJSON: JSON.stringify(geoJSON)
+        ownerId: user.uid,
+        ownerName: user.username,
+        geoJSON: JSON.stringify(boundary),
+        createdAt: serverTimestamp(),
+        authorizedUsers: [user.uid]
     });
+    return { id: docRef.id, ...propertyData, geoJSON: boundary };
 }
 
-export async function updateProject(db, projectId, projectData) {
-    const projectRef = doc(db, 'projects', projectId);
-    await updateDoc(projectRef, projectData);
+export async function updateProperty(db, propertyId, boundary, propertyData) {
+    const propRef = doc(db, "properties", propertyId);
+    await updateDoc(propRef, {
+        ...propertyData,
+        geoJSON: JSON.stringify(boundary),
+    });
 }
 
 export async function deleteProperty(db, propertyId) {
     await deleteDoc(doc(db, "properties", propertyId));
 }
 
-export async function getPropertyById(db, propertyId) {
-    const propertyRef = doc(db, "properties", propertyId);
-    const docSnap = await getDoc(propertyRef);
-    if (docSnap.exists()) {
-        const data = docSnap.data();
-        if (data.geoJSON && typeof data.geoJSON === 'string') {
-            data.geoJSON = JSON.parse(data.geoJSON);
-        }
-        return { id: docSnap.id, ...data };
-    } else {
-        return null;
-    }
+// --- Project & Inquiry Functions ---
+
+export async function createNewInquiryProject(db, user, property, services, involvedProfessionalIds = []) {
+    const allInvolved = [...new Set([user.uid, ...involvedProfessionalIds])];
+
+    const projectData = {
+        ownerId: user.uid,
+        ownerName: user.username,
+        propertyId: property.id,
+        propertyName: property.name,
+        geoJSON: property.geoJSON,
+        status: 'inquiry',
+        servicesSought: services,
+        createdAt: serverTimestamp(),
+        involvedUsers: allInvolved
+    };
+    const projectRef = await addDoc(collection(db, "projects"), projectData);
+    return { id: projectRef.id, ...projectData };
 }
 
-export async function getPropertiesForCurrentUser(db, uid) {
-    const propertiesRef = collection(db, "properties");
-    const q = query(propertiesRef, where("ownerId", "==", uid));
-    const querySnapshot = await getDocs(q);
-    return querySnapshot.docs.map(doc => {
-        const data = doc.data();
-        if (data.geoJSON && typeof data.geoJSON === 'string') {
-            data.geoJSON = JSON.parse(data.geoJSON);
-        }
-        return { id: doc.id, ...data };
-    });
-}
-
-export async function updateUserProfile(db, uid, updatedData) {
-    const userRef = doc(db, "users", uid);
-    await updateDoc(userRef, updatedData);
-}
-
-export async function sendCruiseInquiries(db, inquiriesData) {
-    const inquiriesRef = collection(db, "inquiries");
-    
-    const promises = inquiriesData.map(inquiry => {
-        const payload = {
-            ...inquiry,
+export async function sendCruiseInquiries(db, inquiries) {
+    const batch = writeBatch(db);
+    inquiries.forEach(inquiryData => {
+        const inquiryRef = doc(collection(db, "inquiries"));
+        batch.set(inquiryRef, {
+            ...inquiryData,
             status: 'pending',
             createdAt: serverTimestamp()
-        };
-        return addDoc(inquiriesRef, payload);
+        });
     });
+    await batch.commit();
+}
 
-    await Promise.all(promises);
+export async function updateInquiryStatus(db, inquiryId, status) {
+    await updateDoc(doc(db, "inquiries", inquiryId), { status });
+}
+
+export async function updateProject(db, projectId, data) {
+    await updateDoc(doc(db, "projects", projectId), data);
+}
+
+export async function saveTimberSale(db, saleData) {
+    await addDoc(collection(db, "timberSales"), {
+        ...saleData,
+        postedAt: serverTimestamp(),
+        status: 'open'
+    });
+}
+
+// --- NEW FUNCTION ---
+export async function getTimberSaleById(db, saleId) {
+    const docRef = doc(db, "timberSales", saleId);
+    const docSnap = await getDoc(docRef);
+    return docSnap.exists() ? { id: docSnap.id, ...docSnap.data() } : null;
 }
 
 
-export async function fetchInquiriesForUser(db, userId) {
-    if (!userId) return [];
-    const inquiriesRef = collection(db, "inquiries");
-    const q = query(inquiriesRef, where("involvedUsers", "array-contains", userId));
-    const querySnapshot = await getDocs(q);
-    const inquiries = [];
-    querySnapshot.forEach((doc) => {
-        inquiries.push({ id: doc.id, ...doc.data() });
-    });
-    return inquiries;
-}
-
-export async function fetchQuotesForProject(db, projectIds, landownerId) {
-    if (!projectIds || projectIds.length === 0 ||!landownerId) return [];
-    const quotesRef = collection(db, "quotes");
-    const q = query(quotesRef, where("projectId", "in", projectIds), where("landownerId", "==", landownerId));
-    const querySnapshot = await getDocs(q);
-    const quotes = [];
-    querySnapshot.forEach((doc) => {
-        quotes.push({ id: doc.id, ...doc.data() });
-    });
-    return quotes;
-}
-
-export async function updateInquiryStatus(db, inquiryId, newStatus) {
-    const inquiryRef = doc(db, "inquiries", inquiryId);
-    await updateDoc(inquiryRef, {
-        status: newStatus
-    });
-}
+// --- Logbook / Haul Ticket Functions ---
 
 export async function saveHaulTicket(db, ticketData) {
-    const payload = {
+    await addDoc(collection(db, "haulTickets"), {
         ...ticketData,
         createdAt: serverTimestamp()
-    };
-    const docRef = await addDoc(collection(db, "haulTickets"), payload);
-    return { id: docRef.id, ...payload };
-}
-
-export async function fetchHaulTicketsForUser(db, user) {
-    if (!user) return [];
-    const ticketsRef = collection(db, "haulTickets");
-    
-    let ticketsQuery;
-
-    switch (user.role) {
-        case 'landowner':
-            ticketsQuery = query(ticketsRef, where("ownerId", "==", user.uid));
-            break;
-        case 'timber-buyer': // This is the supplier
-            ticketsQuery = query(ticketsRef, where("supplierId", "==", user.uid));
-            break;
-        case 'logging-contractor': // This is the logger/hauler
-            ticketsQuery = query(ticketsRef, where("submitterId", "==", user.uid));
-            break;
-        default:
-            return [];
-    }
-
-    const ticketsSnapshot = await getDocs(ticketsQuery);
-    return ticketsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-}
-
-
-export async function fetchActiveProjectsForUser(db, user) {
-    if (!user) return [];
-    const projectsRef = collection(db, "projects");
-    let projectsQuery;
-
-    if (user.role === 'timber-buyer' || user.role === 'logging-contractor') {
-        projectsQuery = query(projectsRef, 
-            where("supplierId", "==", user.uid), 
-            where("status", "==", "harvest_in_progress")
-        );
-    } else {
-        return [];
-    }
-
-    const querySnapshot = await getDocs(projectsQuery);
-    return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    });
 }
 
 export async function deleteHaulTicket(db, ticketId) {
-    if (!ticketId) {
-        throw new Error("A ticket ID must be provided to delete.");
-    }
     await deleteDoc(doc(db, "haulTickets", ticketId));
 }
 
-// --- NEW FUNCTION for saving project rates ---
+// --- Rate Sheet Functions ---
+
 export async function saveProjectRates(db, projectId, rateSets) {
-    if (!projectId) {
-        throw new Error("A project ID must be provided.");
-    }
     const projectRef = doc(db, "projects", projectId);
-    await updateDoc(projectRef, {
-        rateSets: rateSets
-    });
+    await updateDoc(projectRef, { rateSets: rateSets });
 }
