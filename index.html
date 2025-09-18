@@ -9,19 +9,21 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.css" />
     <link rel="stylesheet" href="css/style.css" />
+
+    <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css">
 </head>
 <body class="bg-gray-50">
     <div id="loading-overlay" class="hidden">
         <div class="spinner"></div>
     </div>
 
-    <header class="bg-green-900 text-white p-4 text-center shadow-lg">
+    <header class="bg-green-900 text-white p-4 text-center shadow-lg no-print">
         <h1 class="text-4xl font-extrabold tracking-wide">TIMBX</h1>
         <p class="mt-2 text-lg">Your Comprehensive Timber Management Platform</p>
         <p class="text-sm italic mt-1">Connecting landowners, foresters, timber buyers, and contractors for transparent and efficient timber management.</p>
     </header>
 
-    <nav class="bg-green-950 p-2 shadow-md sticky top-0 z-50">
+    <nav class="bg-green-950 p-2 shadow-md sticky top-0 z-50 no-print">
         <div class="container mx-auto flex items-center">
             <div class="flex-1">
             </div>
@@ -225,88 +227,116 @@
         </section>
 
         <section id="logbook" class="main-section hidden p-6 bg-white rounded-lg shadow-md mb-6">
-            <div class="flex flex-col md:flex-row justify-between md:items-center mb-6 border-b pb-4">
-                <h2 class="text-3xl font-semibold text-green-800">Timbx Logbook</h2>
-                <div id="logbook-nav" class="flex space-x-2 mt-4 md:mt-0">
-                    <button id="btn-view-loads" class="logbook-nav-btn bg-green-700 text-white font-bold py-2 px-4 rounded-lg">Loads Dashboard</button>
-                    <button id="btn-log-new-load" class="logbook-nav-btn bg-gray-200 text-gray-800 font-bold py-2 px-4 rounded-lg">Log New Load</button>
-                </div>
-            </div>
-              
-            <div id="logbook-view-loads">
-                <div class="flex justify-between items-center mb-4">
-                    <h3 class="text-2xl font-semibold text-gray-700">Submitted Loads</h3>
-                    <div class="flex items-center space-x-4">
-                        <label for="loads-job-filter" class="text-sm font-medium">Filter by Job:</label>
-                        <select id="loads-job-filter" class="p-2 border border-gray-300 rounded-md shadow-sm">
-                            <option value="all">All Active Jobs</option>
-                        </select>
+            <div id="logbook-printable-wrapper">
+                <div class="flex flex-col md:flex-row justify-between md:items-center mb-6 border-b pb-4 no-print">
+                    <h2 class="text-3xl font-semibold text-green-800">Timbx Logbook</h2>
+                    <div id="logbook-nav" class="flex space-x-2 mt-4 md:mt-0">
+                        <button id="btn-view-loads" class="logbook-nav-btn bg-green-700 text-white font-bold py-2 px-4 rounded-lg">Loads Dashboard</button>
+                        <button id="btn-view-summary" class="logbook-nav-btn bg-gray-200 text-gray-800 font-bold py-2 px-4 rounded-lg">Financial Summary</button>
+                        <button id="btn-log-new-load" class="logbook-nav-btn bg-gray-200 text-gray-800 font-bold py-2 px-4 rounded-lg">Log New Load</button>
                     </div>
                 </div>
-                <div id="my-loads-container" class="space-y-4">
-                    <p class="text-center text-gray-500 p-4">Loading your submitted loads...</p>
-                </div>
-                <div id="my-loads-summary" class="mt-6 pt-4 border-t-2 border-green-700 text-right">
-                    <h3 class="text-xl font-bold">Total Net Tons: <span id="total-net-tons" class="text-green-800">0.00</span></h3>
-                </div>
-            </div>
-
-            <div id="logbook-log-new" class="hidden max-w-2xl mx-auto">
-                 <h3 class="text-2xl font-semibold text-gray-700 mb-6 text-center">Log a New Load</h3>
-                 <form id="log-load-form" class="space-y-4">
-                    <div>
-                        <label for="load-job" class="block text-sm font-medium text-gray-700">Select Job/Project</label>
-                        <select id="load-job" name="job" class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm" required>
-                            <option value="">Loading active jobs...</option>
-                        </select>
-                    </div>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                            <label for="load-date" class="block text-sm font-medium text-gray-700">Date & Time</label>
-                            <input type="datetime-local" id="load-date" name="date" class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm" required>
+                  
+                <div id="logbook-view-loads">
+                    <div class="flex flex-col md:flex-row justify-between md:items-center mb-4 gap-4">
+                        <div class="no-print">
+                            <h3 class="text-2xl font-semibold text-gray-700">Submitted Loads</h3>
                         </div>
-                        <div>
-                            <label for="load-mill" class="block text-sm font-medium text-gray-700">Destination Mill</label>
-                            <select id="load-mill" name="mill" class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm" required>
-                                <option value="">Select a Mill</option>
-                                <option value="Mill A">Mill A</option>
-                                <option value="Mill B">Mill B</option>
-                                <option value="Mill C">Mill C</option>
+                        <div class="flex flex-wrap items-center gap-4 no-print">
+                            <div class="flex items-center space-x-2">
+                                <label for="loads-job-filter" class="text-sm font-medium flex-shrink-0">Filter by Job:</label>
+                                <select id="loads-job-filter" class="p-2 border border-gray-300 rounded-md shadow-sm">
+                                    <option value="all">All Active Jobs</option>
+                                </select>
+                            </div>
+                             <div class="flex items-center space-x-2 border-l pl-4">
+                                <button data-range="week" class="date-filter-btn text-xs bg-gray-200 px-3 py-1 rounded-md">This Week</button>
+                                <button data-range="month" class="date-filter-btn text-xs bg-gray-200 px-3 py-1 rounded-md">This Month</button>
+                                <button data-range="year" class="date-filter-btn text-xs bg-gray-200 px-3 py-1 rounded-md">This Year</button>
+                                <button class="text-xs bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded-md" id="print-loads-report-btn">Print Report</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="my-loads-container" class="space-y-4">
+                        <p class="text-center text-gray-500 p-4">Loading your submitted loads...</p>
+                    </div>
+                    <div id="my-loads-summary" class="mt-6 pt-4 border-t-2 border-green-700 text-right">
+                        <h3 class="text-xl font-bold">Total Net Tons: <span id="total-net-tons" class="text-green-800">0.00</span></h3>
+                    </div>
+                </div>
+    
+                <div id="logbook-financial-summary" class="hidden">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="text-2xl font-semibold text-gray-700">Financial Summary</h3>
+                        <div class="flex items-center space-x-4">
+                            <label for="summary-job-filter" class="text-sm font-medium">Select a Job:</label>
+                            <select id="summary-job-filter" class="p-2 border border-gray-300 rounded-md shadow-sm">
+                                <option value="">Select a job to see summary</option>
                             </select>
                         </div>
                     </div>
-                    <div>
-                        <label for="load-product" class="block text-sm font-medium text-gray-700">Product</label>
-                        <select id="load-product" name="product" class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm" required>
-                            <option value="">Select a Product</option>
-                            <option value="Pine Pulpwood">Pine Pulpwood</option>
-                            <option value="Pine Sawtimber">Pine Sawtimber</option>
-                            <option value="Hardwood Pulpwood">Hardwood Pulpwood</option>
-                            <option value="Hardwood Sawtimber">Hardwood Sawtimber</option>
-                        </select>
+                    <div id="financial-summary-container">
+                        <p class="text-center text-gray-500 p-4">Please select a job to view its financial summary.</p>
                     </div>
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+                </div>
+    
+                <div id="logbook-log-new" class="hidden max-w-2xl mx-auto no-print">
+                     <h3 class="text-2xl font-semibold text-gray-700 mb-6 text-center">Log a New Load</h3>
+                     <form id="log-load-form" class="space-y-4">
                         <div>
-                            <label for="load-gross-weight" class="block text-sm font-medium text-gray-700">Gross Weight (lbs)</label>
-                            <input type="number" id="load-gross-weight" name="grossWeight" placeholder="e.g., 80000" class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm" required>
+                            <label for="load-job" class="block text-sm font-medium text-gray-700">Select Job/Project</label>
+                            <select id="load-job" name="job" class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm" required>
+                                <option value="">Loading active jobs...</option>
+                            </select>
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label for="load-date" class="block text-sm font-medium text-gray-700">Date & Time</label>
+                                <input type="datetime-local" id="load-date" name="date" class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm" required>
+                            </div>
+                            <div>
+                                <label for="load-mill" class="block text-sm font-medium text-gray-700">Destination Mill</label>
+                                <select id="load-mill" name="mill" class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm" required>
+                                    <option value="">Select a Mill</option>
+                                    <option value="Mill A">Mill A</option>
+                                    <option value="Mill B">Mill B</option>
+                                    <option value="Mill C">Mill C</option>
+                                </select>
+                            </div>
                         </div>
                         <div>
-                            <label for="load-tare-weight" class="block text-sm font-medium text-gray-700">Tare Weight (lbs)</label>
-                            <input type="number" id="load-tare-weight" name="tareWeight" placeholder="e.g., 35000" class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm" required>
+                            <label for="load-product" class="block text-sm font-medium text-gray-700">Product</label>
+                            <select id="load-product" name="product" class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm" required>
+                                <option value="">Select a Product</option>
+                                <option value="Pine Pulpwood">Pine Pulpwood</option>
+                                <option value="Pine Sawtimber">Pine Sawtimber</option>
+                                <option value="Hardwood Pulpwood">Hardwood Pulpwood</option>
+                                <option value="Hardwood Sawtimber">Hardwood Sawtimber</option>
+                            </select>
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+                            <div>
+                                <label for="load-gross-weight" class="block text-sm font-medium text-gray-700">Gross Weight (lbs)</label>
+                                <input type="number" id="load-gross-weight" name="grossWeight" placeholder="e.g., 80000" class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm" required>
+                            </div>
+                            <div>
+                                <label for="load-tare-weight" class="block text-sm font-medium text-gray-700">Tare Weight (lbs)</label>
+                                <input type="number" id="load-tare-weight" name="tareWeight" placeholder="e.g., 35000" class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm" required>
+                            </div>
+                            <div>
+                                <p class="text-sm font-medium text-gray-700">Net Weight (Tons)</p>
+                                <p id="load-net-weight" class="mt-1 block w-full p-2 bg-gray-100 border border-gray-300 rounded-md font-bold text-lg">0.00</p>
+                            </div>
                         </div>
                         <div>
-                            <p class="text-sm font-medium text-gray-700">Net Weight (Tons)</p>
-                            <p id="load-net-weight" class="mt-1 block w-full p-2 bg-gray-100 border border-gray-300 rounded-md font-bold text-lg">0.00</p>
+                            <label for="load-ticket-photo" class="block text-sm font-medium text-gray-700">Load Ticket Photo (Optional)</label>
+                            <input type="file" id="load-ticket-photo" name="ticketPhoto" class="mt-1 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-green-100 file:text-green-700 hover:file:bg-green-200" accept="image/*">
                         </div>
-                    </div>
-                    <div>
-                        <label for="load-ticket-photo" class="block text-sm font-medium text-gray-700">Load Ticket Photo (Optional)</label>
-                        <input type="file" id="load-ticket-photo" name="ticketPhoto" class="mt-1 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-green-100 file:text-green-700 hover:file:bg-green-200" accept="image/*">
-                    </div>
-                    <div class="pt-4 border-t">
-                        <button type="submit" class="w-full bg-green-700 hover:bg-green-600 text-white font-bold py-3 px-4 rounded-lg transition duration-200">Submit Ticket</button>
-                    </div>
-                </form>
+                        <div class="pt-4 border-t">
+                            <button type="submit" class="w-full bg-green-700 hover:bg-green-600 text-white font-bold py-3 px-4 rounded-lg transition duration-200">Submit Ticket</button>
+                        </div>
+                    </form>
+                </div>
             </div>
         </section>
 
@@ -491,7 +521,9 @@
     <script src="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet-geometryutil/0.10.2/leaflet.geometryutil.min.js"></script>
 
+    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
+
     <script type="module" src="js/main.js"></script>
 
-</body>
+</body> 
 </html>

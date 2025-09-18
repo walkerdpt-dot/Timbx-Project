@@ -7,7 +7,7 @@
      signOut
  } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
  import { createUserProfile, getUserProfile } from './firestore.js';
- import { showInfoModal } from './ui.js';
+ import { showInfoModal, showToast } from './ui.js';
 
  export function initializeAuth(app, db, onUserStatusChange, onInitialLoadComplete) {
      const auth = getAuth(app);
@@ -82,6 +82,6 @@
          await signOut(auth);
      } catch (error) {
          console.error("Logout failed:", error);
-         alert("Failed to log out. Please try again.");
+         showToast("Failed to log out. Please try again.", "error");
      }
  }

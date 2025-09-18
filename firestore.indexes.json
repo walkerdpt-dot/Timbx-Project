@@ -1,7 +1,7 @@
 {
   "indexes": [
     {
-      "collectionGroup": "inquiries",
+      "collectionGroup": "activity",
       "queryScope": "COLLECTION",
       "fields": [
         {
@@ -9,10 +9,11 @@
           "arrayConfig": "CONTAINS"
         },
         {
-          "fieldPath": "createdAt",
+          "fieldPath": "timestamp",
           "order": "DESCENDING"
         }
       ]
     }
-  ]
+  ],
+  "fieldOverrides": []
 }

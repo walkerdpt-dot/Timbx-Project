@@ -1,8 +1,31 @@
 // js/ui.js
 import { getMapInstance, initMyPropertiesMap, myPropertiesLayerGroup, initProfileDisplayMap, initPropertyFormMap, initSignupMap, initEditProfileMap, initTimberSaleMap, updateServiceAreaCircle, getDrawnHarvestAreas } from './map.js';
-import { currentUser, allProperties, allProjects, allProfessionalProfiles, allInquiries, globalMarketplaceLayerGroup, db, allTimberSales } from './state.js';
+import { currentUser, allProperties, allProjects, allProfessionalProfiles, allInquiries, globalMarketplaceLayerGroup, db, allTimberSales, allHaulTickets, allActivities } from './state.js';
 import { FORESTER_SPECIALTIES, BUYER_PRODUCTS, LOGGING_CONTRACTOR_SERVICES, SERVICE_PROVIDER_SERVICES } from './main.js';
-import { getPropertyById, fetchQuotesForProject, getUserProfileById, getPropertiesForCurrentUser, fetchActiveProjectsForUser, fetchHaulTicketsForUser, fetchProjectFeed, getHaulTicketById } from './firestore.js';
+import { getPropertyById, fetchQuotesForProject, getUserProfileById, listenToProjectMessages, getHaulTicketById } from './firestore.js';
+
+let activeChatUnsubscribe = null;
+
+// --- NEW TOAST NOTIFICATION FUNCTION ---
+export function showToast(message, type = 'info') {
+    const colors = {
+        info: 'linear-gradient(to right, #00b09b, #96c93d)',
+        success: 'linear-gradient(to right, #1D976C, #93F9B9)',
+        error: 'linear-gradient(to right, #d32f2f, #ef5350)',
+    };
+
+    Toastify({
+        text: message,
+        duration: 3000,
+        close: true,
+        gravity: "top", // `top` or `bottom`
+        position: "right", // `left`, `center` or `right`
+        stopOnFocus: true, // Prevents dismissing of toast on hover
+        style: {
+            background: colors[type] || colors['info'],
+        },
+    }).showToast();
+}
 
 // --- Global Maps for Highlighting ---
 const marketplaceFeatureMap = new Map();
@@ -155,7 +178,7 @@ async function initializeLogLoadForm() {
     const jobSelect = document.getElementById('load-job');
     jobSelect.innerHTML = `<option value="">Loading active jobs...</option>`;
     if (!currentUser) return;
-    const activeProjects = await fetchActiveProjectsForUser(db, currentUser);
+    const activeProjects = allProjects.filter(p => p.status === 'harvest_in_progress' && p.involvedUsers.includes(currentUser.uid));
     if (activeProjects.length > 0) {
         jobSelect.innerHTML = `<option value="">Select an Active Job</option>`;
         activeProjects.forEach(project => {
@@ -166,16 +189,21 @@ async function initializeLogLoadForm() {
     }
 }
 
-function displayFilteredLoads(tickets) {
+function displayFilteredLoads() {
     const container = document.getElementById('my-loads-container');
     const filterValue = document.getElementById('loads-job-filter').value;
+    
+    const tickets = allHaulTickets;
+
     const filteredTickets = filterValue === 'all' ? tickets : tickets.filter(t => t.jobId === filterValue);
     filteredTickets.sort((a, b) => new Date(b.dateTime) - new Date(a.dateTime));
+    
     if (filteredTickets.length === 0) {
         container.innerHTML = '<p class="text-center text-gray-500 p-4">No loads found for the selected job.</p>';
         document.getElementById('total-net-tons').textContent = '0.00';
         return;
     }
+
     let totalTons = 0;
     const showAdminControls = currentUser?.role === 'timber-buyer';
     const loadsHTML = filteredTickets.map(load => {
@@ -213,7 +241,14 @@ function displayFilteredLoads(tickets) {
 // --- EXPORTED UI & RENDERING FUNCTIONS ---
 
 export function openModal(modalId) { document.getElementById(modalId)?.classList.remove('hidden'); }
-export function closeModal(modalId) { document.getElementById(modalId)?.classList.add('hidden'); }
+
+export function closeModal(modalId) {
+    if (modalId === 'project-chat-modal' && activeChatUnsubscribe) {
+        activeChatUnsubscribe();
+        activeChatUnsubscribe = null;
+    }
+    document.getElementById(modalId)?.classList.add('hidden');
+}
 
 export function showInfoModal(title, message) {
     document.getElementById('info-modal-title').textContent = title;
@@ -551,9 +586,9 @@ async function renderProjectCard(project) {
     const property = allProperties.find(p => p.id === project.propertyId);
     const serviceSought = project.servicesSought?.[0] || 'General Inquiry';
     let participantHTML = '';
-    let projectFeedButtonHTML = '';
+    let chatButtonHTML = '';
     if (project.status !== 'inquiry') {
-        projectFeedButtonHTML = `<button class="view-project-feed-btn text-xs bg-gray-200 hover:bg-gray-300 font-semibold py-1 px-2 rounded-md" data-project-id="${project.id}">View Feed</button>`;
+        chatButtonHTML = `<button class="view-project-chat-btn text-xs bg-gray-200 hover:bg-gray-300 font-semibold py-1 px-2 rounded-md" data-project-id="${project.id}">Chat</button>`;
     }
     if (isOwner) {
         let participant;
@@ -598,7 +633,7 @@ async function renderProjectCard(project) {
                 </div>
                 <div class="flex flex-col items-end gap-2">
                     <span class="flex-shrink-0 font-semibold capitalize text-indigo-700 bg-indigo-100 py-0.5 px-2 rounded-full text-xs">${statusText}</span>
-                    ${projectFeedButtonHTML}
+                    ${chatButtonHTML}
                 </div>
             </div>
             <div class="mt-1 pt-1 border-t text-sm">
@@ -644,10 +679,10 @@ async function renderLandownerInquiryContent(project) {
     return `
         <div class="pt-1 mt-1 border-t">
             <div class="flex justify-between items-center mt-1">
-            	<h4 class="font-semibold text-gray-800 text-sm">Inquiries Sent</h4>
-            	<button class="view-quotes-btn bg-green-600 hover:bg-green-700 text-white font-bold py-1 px-3 rounded-md text-xs ${quoteCount === 0 ? 'opacity-50 cursor-not-allowed' : ''}" data-project-id="${project.id}" ${quoteCount === 0 ? 'disabled' : ''}>
-            	    View Quotes (${quoteCount})
-            	</button>
+                <h4 class="font-semibold text-gray-800 text-sm">Inquiries Sent</h4>
+                <button class="view-quotes-btn bg-green-600 hover:bg-green-700 text-white font-bold py-1 px-3 rounded-md text-xs ${quoteCount === 0 ? 'opacity-50 cursor-not-allowed' : ''}" data-project-id="${project.id}" ${quoteCount === 0 ? 'disabled' : ''}>
+                    View Quotes (${quoteCount})
+                </button>
             </div>
             <div class="mt-1 border rounded-md bg-gray-50 divide-y divide-gray-200">
                 ${inquiriesHTML || '<p class="text-xs text-center p-2 text-gray-500">No inquiries sent for this project.</p>'}
@@ -675,46 +710,70 @@ export async function renderInquiriesForCurrentUser() {
             container.innerHTML = `<p class="text-center p-4 text-gray-600">${showArchived ? 'You have no inquiries.' : 'You have no active inquiries.'}</p>`;
             return;
         }
-        inquiriesToDisplay.sort((a, b) => (b.createdAt?.toDate() || 0) - (a.createdAt?.toDate() || 0));
+        
+        // Sort pending to the top, then by date
+        const statusOrder = { 'pending': 1, 'quoted': 2, 'declined': 3, 'withdrawn': 4, 'archived': 5 };
+        inquiriesToDisplay.sort((a, b) => {
+            const statusA = statusOrder[a.status] || 99;
+            const statusB = statusOrder[b.status] || 99;
+            if (statusA !== statusB) {
+                return statusA - statusB;
+            }
+            return (b.createdAt?.toDate() || 0) - (a.createdAt?.toDate() || 0);
+        });
+
         const inquiriesHTML = inquiriesToDisplay.map(inquiry => {
             const inquiryDate = inquiry.createdAt?.toDate ? inquiry.createdAt.toDate().toLocaleDateString() : 'N/A';
             const property = allProperties.find(p => p.id === inquiry.propertyId);
-            let actionButtonsHTML = '';
-            if (inquiry.status === 'pending') {
-                actionButtonsHTML = `
-                    <button class="submit-quote-action-btn bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-2 px-4 rounded-md text-sm" data-inquiry-id="${inquiry.id}">Submit Quote</button>
-                    <button class="decline-inquiry-btn bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-md text-sm" data-inquiry-id="${inquiry.id}">Decline</button>
-                `;
-            } else if (inquiry.status !== 'archived') {
-                actionButtonsHTML = `
-                    <button class="archive-inquiry-btn bg-blue-500 hover:bg-blue-600 text-white font-bold py-1 px-2 rounded-md text-xs" data-inquiry-id="${inquiry.id}">Archive</button>
-                `;
-            }
-            let statusStyle = 'bg-gray-200 text-gray-800';
-            if (inquiry.status === 'pending') statusStyle = 'bg-yellow-200 text-yellow-800 animate-pulse';
-            if (inquiry.status === 'quoted') statusStyle = 'bg-blue-200 text-blue-800';
-            if (inquiry.status === 'declined') statusStyle = 'bg-red-200 text-red-800';
-            if (inquiry.status === 'withdrawn') statusStyle = 'bg-gray-300 text-gray-700';
-            if (inquiry.status === 'archived') statusStyle = 'bg-gray-400 text-white';
-            return `
-                <div class="border rounded-lg p-3 bg-white hover:shadow-md transition-shadow">
-                    <div class="flex justify-between items-start gap-2 mb-2">
-                        <div>
-                            <h3 class="text-lg font-bold text-green-800">${inquiry.propertyName}</h3>
-                            <p class="text-xs text-gray-500">From: <span class="font-semibold">${inquiry.fromUserName}</span> | Received: ${inquiryDate}</p>
-                            <p class="text-xs text-gray-500">${property?.acreage?.toFixed(1) || 'N/A'} ac | ${property?.county || 'N/A'}</p>
-                        </div>
-                        <span class="text-xs font-medium py-1 px-3 rounded-full capitalize ${inquiry.status === 'withdrawn' ? 'line-through' : ''} ${statusStyle}">${inquiry.status}</span>
+            const isPending = inquiry.status === 'pending';
+
+            const summaryHTML = `
+                <div class="flex justify-between items-start gap-2">
+                    <div>
+                        <h3 class="text-lg font-bold text-green-800">${inquiry.propertyName}</h3>
+                        <p class="text-xs text-gray-500">From: <span class="font-semibold">${inquiry.fromUserName}</span> | Received: ${inquiryDate}</p>
                     </div>
-                    <div class="bg-gray-50 p-2 rounded-md border text-sm">
-                        <p class="mt-1 text-gray-700 whitespace-pre-wrap">"${inquiry.message || 'No specific message provided.'}"</p>
-                    </div>
-                    <div class="mt-3 pt-3 border-t flex items-center justify-between gap-3">
-                        <a href="details.html?type=property&id=${inquiry.propertyId}&from=my-inquiries" class="text-blue-600 hover:underline text-sm font-semibold">View Property Details &rarr;</a>
-                        <div class="flex items-center gap-2">${actionButtonsHTML}</div>
+                    <span class="text-xs font-medium py-1 px-3 rounded-full capitalize ${
+                        isPending ? 'bg-yellow-200 text-yellow-800 animate-pulse' : 
+                        inquiry.status === 'quoted' ? 'bg-blue-200 text-blue-800' :
+                        inquiry.status === 'declined' ? 'bg-red-200 text-red-800' :
+                        inquiry.status === 'withdrawn' ? 'bg-gray-300 text-gray-700 line-through' :
+                        'bg-gray-400 text-white'
+                    }">${inquiry.status}</span>
+                </div>
+            `;
+
+            const detailsHTML = `
+                <div class="mt-2 bg-gray-50 p-2 rounded-md border text-sm">
+                    <p class="mt-1 text-gray-700 whitespace-pre-wrap">"${inquiry.message || 'No specific message provided.'}"</p>
+                </div>
+                <div class="mt-3 pt-3 border-t flex items-center justify-between gap-3">
+                    <a href="details.html?type=property&id=${inquiry.propertyId}&from=my-inquiries" class="text-blue-600 hover:underline text-sm font-semibold">View Property Details &rarr;</a>
+                    <div class="flex items-center gap-2">
+                        ${inquiry.status === 'pending' ? `
+                            <button class="submit-quote-action-btn bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-2 px-4 rounded-md text-sm" data-inquiry-id="${inquiry.id}">Submit Quote</button>
+                            <button class="decline-inquiry-btn bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-md text-sm" data-inquiry-id="${inquiry.id}">Decline</button>
+                        ` : inquiry.status !== 'archived' ? `
+                            <button class="archive-inquiry-btn bg-blue-500 hover:bg-blue-600 text-white font-bold py-1 px-2 rounded-md text-xs" data-inquiry-id="${inquiry.id}">Archive</button>
+                        ` : ''}
                     </div>
                 </div>
             `;
+
+            if (isPending) {
+                return `<div class="border rounded-lg p-3 bg-white hover:shadow-md transition-shadow">${summaryHTML}${detailsHTML}</div>`;
+            } else {
+                return `
+                    <details class="border rounded-lg bg-white hover:shadow-md transition-shadow">
+                        <summary class="p-3 cursor-pointer list-none">
+                            ${summaryHTML}
+                        </summary>
+                        <div class="p-3 border-t">
+                            ${detailsHTML}
+                        </div>
+                    </details>
+                `;
+            }
         }).join('');
         container.innerHTML = inquiriesHTML;
     } catch (error) {
@@ -796,12 +855,14 @@ export function initializeLogbook() {
     showView('view');
 }
 
-export async function renderMyLoads() {
+export function renderMyLoads() {
     if (!currentUser) return;
     const container = document.getElementById('my-loads-container');
     const filter = document.getElementById('loads-job-filter');
     container.innerHTML = '<p class="text-center text-gray-500 p-4">Loading your submitted loads...</p>';
-    const allUserTickets = await fetchHaulTicketsForUser(db, currentUser);
+    
+    const allUserTickets = allHaulTickets;
+
     if (!allUserTickets || allUserTickets.length === 0) {
         container.innerHTML = '<p class="text-center text-gray-500 p-4">No loads found for your account.</p>';
         document.getElementById('total-net-tons').textContent = '0.00';
@@ -816,8 +877,8 @@ export async function renderMyLoads() {
             filter.innerHTML += `<option value="${jobId}">${project.propertyName}</option>`;
         }
     });
-    filter.onchange = () => displayFilteredLoads(allUserTickets);
-    displayFilteredLoads(allUserTickets);
+    filter.onchange = () => displayFilteredLoads();
+    displayFilteredLoads();
 }
 
 // --- MODAL & FORM FUNCTIONS ---
@@ -862,7 +923,7 @@ export function openServiceSelectModal(propertyId, propertyName) {
     const modal = document.getElementById('service-select-modal');
     if (!modal) {
         console.error("Fatal: service-select-modal not found in the DOM.");
-        alert("Error: Could not open the service selection form. Please refresh the page.");
+        showToast("Error: Could not open the service selection form. Please refresh the page.", "error");
         return;
     }
     modal.dataset.propertyId = propertyId;
@@ -913,7 +974,7 @@ export function openServiceSelectModal(propertyId, propertyName) {
 export async function openInviteProfessionalModal(propertyId, role) {
     const modal = document.getElementById('invite-forester-modal');
     if (!modal) {
-        alert('Error: Invite modal HTML not found.');
+        showToast('Error: Invite modal HTML not found.', "error");
         return;
     }
 
@@ -927,7 +988,7 @@ export async function openInviteProfessionalModal(propertyId, role) {
 
     const property = allProperties.find(p => p.id === propertyId);
     if (!property) {
-        alert("Could not load property details.");
+        showToast("Could not load property details.", "error");
         return;
     }
     modal.dataset.propertyId = propertyId;
@@ -990,7 +1051,7 @@ export function openDeclineModal(inquiryId) {
 export async function openViewInquiryModal(inquiryId) {
     const inquiry = allInquiries.find(i => i.id === inquiryId);
     if (!inquiry) {
-        alert("Could not find inquiry details.");
+        showToast("Could not find inquiry details.", "error");
         return;
     }
     document.getElementById('view-inquiry-recipient').textContent = inquiry.toUserName || 'N/A';
@@ -1014,13 +1075,13 @@ export async function openViewInquiryModal(inquiryId) {
 export async function populateCruiseFormPage(projectId) {
     const project = allProjects.find(p => p.id === projectId);
     if (!project) {
-        alert("Project not found.");
+        showToast("Project not found.", "error");
         window.location.hash = '#my-projects';
         return;
     }
     const property = allProperties.find(p => p.id === project.propertyId);
     if (!property) {
-        alert("Associated property data could not be loaded. You may not have the required permissions yet.");
+        showToast("Associated property data could not be loaded. You may not have the required permissions yet.", "error");
         window.location.hash = '#my-projects';
         return;
     }
@@ -1384,7 +1445,7 @@ function calculateAndDisplayInventoryTotals(property) {
 
 export function openForesterQuoteModal(inquiryId) {
     const inquiry = allInquiries.find(i => i.id === inquiryId);
-    if (!inquiry) return alert("Could not find inquiry details.");
+    if (!inquiry) return showToast("Could not find inquiry details.", "error");
     const form = document.getElementById('submit-quote-form');
     form.reset();
     document.getElementById('quote-context-id').value = inquiry.propertyId;
@@ -1396,7 +1457,7 @@ export function openForesterQuoteModal(inquiryId) {
 
 export async function openViewQuotesModal(projectId) {
     const project = allProjects.find(p => p.id === projectId);
-    if (!project) return alert("Project not found.");
+    if (!project) return showToast("Project not found.", "error");
     const modal = document.getElementById('view-quotes-modal');
     const title = document.getElementById('view-quotes-title');
     const list = document.getElementById('view-quotes-list');
@@ -1476,7 +1537,7 @@ export function openEditProfileModal() {
 export function openRateSheetModal(projectId) {
     const project = allProjects.find(p => p.id === projectId);
     if (!project) {
-        alert("Could not find project details.");
+        showToast("Could not find project details.", "error");
         return;
     }
     const form = document.getElementById('rate-sheet-form');
@@ -1558,21 +1619,17 @@ export function setupServiceFilter(checkboxId, dropdownId, services) {
 
 // --- NEW/UPDATED DASHBOARD & PROJECT FEED FUNCTIONS ---
 
-export async function renderDashboard() {
+export function renderDashboard() {
     if (!currentUser) return;
-
     const container = document.getElementById('dashboard');
-    container.innerHTML = `
-        <div class="p-6 bg-white rounded-lg shadow-md">
-            <h2 class="text-3xl font-bold text-gray-800 mb-2">Welcome back, ${currentUser.username}!</h2>
-            <p class="text-lg text-gray-600 mb-6">Here's your command center.</p>
-        </div>`;
+    container.innerHTML = `<div class="p-6 bg-white rounded-lg shadow-md animate-pulse"></div>`; // Placeholder
 
     if (currentUser.role === 'landowner') {
         renderLandownerDashboard(container);
     } else {
         renderProfessionalDashboard(container);
     }
+    renderActivityFeed();
 }
 
 function renderLandownerDashboard(container) {
@@ -1628,6 +1685,13 @@ function renderLandownerDashboard(container) {
                     ${actionItemsHTML}
                 </div>
             </div>
+
+            <div id="dashboard-activity-feed" class="mt-8 pt-6 border-t">
+                <h3 class="text-2xl font-semibold text-gray-800 mb-4">Recent Activity</h3>
+                <div id="activity-feed-container" class="space-y-2">
+                    <p class="text-center text-gray-500 p-4">Loading activity...</p>
+                </div>
+            </div>
         </div>
     `;
 }
@@ -1640,7 +1704,8 @@ function renderProfessionalDashboard(container) {
         <div class="p-4 md:p-6">
             <h2 class="text-3xl font-bold text-gray-800 mb-2">Welcome back, ${currentUser.username}!</h2>
             <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mt-6">
-                <a href="#my-inquiries" class="bg-white p-6 rounded-lg shadow-md hover:shadow-xl transition-shadow border-l-4 border-amber-500">
+                <a href="#my-inquiries" class="bg-white p-6 rounded-lg shadow-md hover:shadow-xl transition-shadow border-l-4 border-amber-500 relative">
+                    ${newInquiries.length > 0 ? '<span class="absolute top-2 right-2 flex h-3 w-3"><span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span><span class="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span></span>' : ''}
                     <h3 class="text-xl font-semibold text-gray-700">New Inquiries</h3>
                     <p class="text-5xl font-bold text-amber-500 mt-2">${newInquiries.length}</p>
                 </a>
@@ -1656,51 +1721,100 @@ function renderProfessionalDashboard(container) {
                     </div>
                 </a>
             </div>
+
+            <div id="dashboard-activity-feed" class="mt-8 pt-6 border-t">
+                <h3 class="text-2xl font-semibold text-gray-800 mb-4">Recent Activity</h3>
+                <div id="activity-feed-container" class="space-y-2">
+                    <p class="text-center text-gray-500 p-4">Loading activity...</p>
+                </div>
+            </div>
         </div>
     `;
 }
 
-export async function openProjectFeedModal(projectId) {
-    const project = allProjects.find(p => p.id === projectId);
-    if (!project) {
-        alert("Could not find project details.");
+function renderActivityFeed() {
+    const container = document.getElementById('activity-feed-container');
+    if (!container) return; 
+
+    if (allActivities.length === 0) {
+        container.innerHTML = '<p class="text-center text-gray-500 p-4">No recent activity. Perform an action to see it here!</p>';
         return;
     }
 
-    document.getElementById('project-feed-title').textContent = `Project Feed: ${project.propertyName}`;
-    document.getElementById('project-feed-project-id').value = projectId;
-    document.getElementById('project-feed-form').reset();
-    
-    openModal('project-feed-modal');
-    await renderProjectFeedEntries(projectId);
+    const activityHTML = allActivities.map(activity => {
+        const timestamp = activity.timestamp?.toDate ? timeAgo(activity.timestamp.toDate()) : 'just now';
+        const isActionable = activity.type === 'CRUISE_SUBMITTED' || activity.type === 'QUOTE_SUBMITTED';
+        const bgColor = isActionable ? 'bg-blue-50 hover:bg-blue-100' : 'bg-gray-50 hover:bg-gray-100';
+        const borderColor = isActionable ? 'border-blue-300' : 'border-gray-200';
+
+        return `
+            <a href="${activity.link || '#'}" class="block p-3 rounded-md border ${borderColor} ${bgColor} transition-colors">
+                <p class="text-sm text-gray-800">${activity.message}</p>
+                <p class="text-xs text-gray-500 text-right">${timestamp}</p>
+            </a>
+        `;
+    }).join('');
+
+    container.innerHTML = activityHTML;
 }
 
-export async function renderProjectFeedEntries(projectId) {
-    const entriesContainer = document.getElementById('project-feed-entries');
-    entriesContainer.innerHTML = '<p class="text-gray-500 text-center">Loading project history...</p>';
+function timeAgo(date) {
+    const seconds = Math.floor((new Date() - date) / 1000);
+    let interval = seconds / 31536000;
+    if (interval > 1) return Math.floor(interval) + " years ago";
+    interval = seconds / 2592000;
+    if (interval > 1) return Math.floor(interval) + " months ago";
+    interval = seconds / 86400;
+    if (interval > 1) return Math.floor(interval) + " days ago";
+    interval = seconds / 3600;
+    if (interval > 1) return Math.floor(interval) + " hours ago";
+    interval = seconds / 60;
+    if (interval > 1) return Math.floor(interval) + " minutes ago";
+    return "just now";
+}
 
-    const feedEntries = await fetchProjectFeed(db, projectId);
 
-    if (feedEntries.length === 0) {
-        entriesContainer.innerHTML = '<p class="text-gray-500 text-center">No entries yet. Be the first to post an update!</p>';
+export function openProjectChatModal(projectId) {
+    const project = allProjects.find(p => p.id === projectId);
+    if (!project) {
+        showToast("Could not find project details.", "error");
         return;
     }
 
-    entriesContainer.innerHTML = feedEntries.map(entry => {
-        const entryDate = entry.createdAt?.toDate() ? entry.createdAt.toDate().toLocaleString() : 'Just now';
-        const isCurrentUser = entry.userId === currentUser.uid;
+    document.getElementById('project-chat-title').textContent = `Chat for: ${project.propertyName}`;
+    document.getElementById('project-chat-project-id').value = projectId;
+    document.getElementById('project-chat-form').reset();
+    
+    if (activeChatUnsubscribe) {
+        activeChatUnsubscribe();
+    }
+    activeChatUnsubscribe = listenToProjectMessages(db, projectId, renderProjectMessages);
+    openModal('project-chat-modal');
+}
+
+export function renderProjectMessages(messages) {
+    const entriesContainer = document.getElementById('project-chat-entries');
+    if (!entriesContainer) return;
+
+    if (messages.length === 0) {
+        entriesContainer.innerHTML = '<p class="text-gray-500 text-center">No messages yet. Be the first to start the conversation!</p>';
+        return;
+    }
+
+    entriesContainer.innerHTML = messages.map(msg => {
+        const isCurrentUser = msg.userId === currentUser.uid;
         const defaultAvatar = 'https://placehold.co/128x128/8f8f8f/ffffff?text=No+Image';
-        const avatarUrl = entry.profilePictureUrl || defaultAvatar;
+        const avatarUrl = msg.profilePictureUrl || defaultAvatar;
 
         return `
             <div class="flex items-start gap-3 ${isCurrentUser ? 'flex-row-reverse' : ''}">
-                <img src="${avatarUrl}" alt="${entry.username}" class="w-10 h-10 rounded-full object-cover">
+                <img src="${avatarUrl}" alt="${msg.username}" class="w-8 h-8 rounded-full object-cover flex-shrink-0">
                 <div class="flex-1">
-                    <div class="p-3 rounded-lg ${isCurrentUser ? 'bg-blue-100' : 'bg-gray-200'}">
-                        <p class="text-sm text-gray-800">${entry.message}</p>
+                    <div class="p-3 rounded-lg ${isCurrentUser ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-800'}">
+                        <p class="text-sm">${msg.message}</p>
                     </div>
                     <p class="text-xs text-gray-500 mt-1 ${isCurrentUser ? 'text-right' : ''}">
-                        <strong>${isCurrentUser ? 'You' : entry.username}</strong> on ${entryDate}
+                        <strong>${isCurrentUser ? 'You' : msg.username}</strong>
                     </p>
                 </div>
             </div>
@@ -1740,7 +1854,7 @@ export function updateMapLegend() {
 export async function openEditLoadModal(ticketId) {
     const ticket = await getHaulTicketById(db, ticketId);
     if (!ticket) {
-        alert("Could not find the haul ticket to edit.");
+        showToast("Could not find the haul ticket to edit.", "error");
         return;
     }
 

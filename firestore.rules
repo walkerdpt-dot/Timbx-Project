@@ -22,11 +22,10 @@ service cloud.firestore {
       allow create: if request.auth != null && request.auth.uid == request.resource.data.ownerId;
       allow update: if request.auth != null && request.auth.uid in resource.data.involvedUsers;
 
-      // --- CORRECTED RULE FOR PROJECT FEED ---
-      // This rule now correctly checks the parent project document to grant access.
-      match /feed/{feedId} {
+      // UPDATED for the chat system
+      match /messages/{messageId} {
         allow read, create: if exists(/databases/$(database)/documents/projects/$(projectId)) &&
-                           request.auth.uid in get(/databases/$(database)/documents/projects/$(projectId)).data.involvedUsers;
+                            request.auth.uid in get(/databases/$(database)/documents/projects/$(projectId)).data.involvedUsers;
       }
     }
     
@@ -75,6 +74,12 @@ service cloud.firestore {
       allow update, delete: if request.auth != null 
         && request.auth.uid == resource.data.supplierId
         && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'timber-buyer';
+    }
+
+    match /activity/{activityId} {
+        allow read: if request.auth != null && request.auth.uid in resource.data.involvedUsers;
+        // Writes are handled server-side by cloud functions and trusted client logic
+        allow write: if request.auth != null;
     }
   }
 }

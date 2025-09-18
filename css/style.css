@@ -75,20 +75,14 @@ body {
 
 /* =================================================================== */
 
-/* Modal & Overlay Styles (CORRECTED SELECTORS)                        */
+/* Modal & Overlay Styles (CORRECTED & REFACTORED)                     */
 
 /* =================================================================== */
 
-#login-modal:not(.hidden),
-#service-select-modal:not(.hidden),
-#invite-forester-modal:not(.hidden),
-#view-inquiry-modal:not(.hidden),
-#submit-quote-modal:not(.hidden),
-#view-quotes-modal:not(.hidden),
-#info-modal:not(.hidden),
-#confirmation-modal:not(.hidden),
-#project-feed-modal:not(.hidden),
-#edit-load-modal:not(.hidden),
+/* This now targets the .modal-overlay class shared by ALL modals,
+   making it more robust and preventing this issue in the future. */
+
+.modal-overlay:not(.hidden),
 .full-page-section:not(.hidden) {
   position: fixed;
   top: 0;
@@ -975,8 +969,16 @@ video {
   right: 0px;
 }
 
+.right-2 {
+  right: 0.5rem;
+}
+
 .top-0 {
   top: 0px;
+}
+
+.top-2 {
+  top: 0.5rem;
 }
 
 .top-4 {
@@ -1093,6 +1095,10 @@ video {
   display: flex;
 }
 
+.inline-flex {
+  display: inline-flex;
+}
+
 .table {
   display: table;
 }
@@ -1109,12 +1115,12 @@ video {
   height: 0.25rem;
 }
 
-.h-10 {
-  height: 2.5rem;
-}
-
 .h-12 {
   height: 3rem;
+}
+
+.h-3 {
+  height: 0.75rem;
 }
 
 .h-32 {
@@ -1149,12 +1155,16 @@ video {
   height: 600px;
 }
 
-.max-h-96 {
-  max-height: 24rem;
+.h-\[70vh\] {
+  height: 70vh;
 }
 
-.max-h-\[50vh\] {
-  max-height: 50vh;
+.h-full {
+  height: 100%;
+}
+
+.max-h-96 {
+  max-height: 24rem;
 }
 
 .max-h-\[60vh\] {
@@ -1169,12 +1179,12 @@ video {
   width: 25%;
 }
 
-.w-10 {
-  width: 2.5rem;
-}
-
 .w-12 {
   width: 3rem;
+}
+
+.w-3 {
+  width: 0.75rem;
 }
 
 .w-32 {
@@ -1243,6 +1253,17 @@ video {
   transform: translate(var(--tw-translate-x), var(--tw-translate-y)) rotate(var(--tw-rotate)) skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y));
 }
 
+@keyframes ping {
+  75%, 100% {
+    transform: scale(2);
+    opacity: 0;
+  }
+}
+
+.animate-ping {
+  animation: ping 1s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
 @keyframes pulse {
   50% {
     opacity: .5;
@@ -1261,12 +1282,20 @@ video {
   cursor: pointer;
 }
 
+.resize-none {
+  resize: none;
+}
+
 .list-inside {
   list-style-position: inside;
 }
 
 .list-disc {
   list-style-type: disc;
+}
+
+.list-none {
+  list-style-type: none;
 }
 
 .grid-cols-1 {
@@ -1487,6 +1516,10 @@ video {
 
 .border-t-2 {
   border-top-width: 2px;
+}
+
+.border-l {
+  border-left-width: 1px;
 }
 
 .border-dashed {
@@ -1712,6 +1745,16 @@ video {
   background-color: rgb(254 202 202 / var(--tw-bg-opacity, 1));
 }
 
+.bg-red-400 {
+  --tw-bg-opacity: 1;
+  background-color: rgb(248 113 113 / var(--tw-bg-opacity, 1));
+}
+
+.bg-red-500 {
+  --tw-bg-opacity: 1;
+  background-color: rgb(239 68 68 / var(--tw-bg-opacity, 1));
+}
+
 .bg-red-600 {
   --tw-bg-opacity: 1;
   background-color: rgb(220 38 38 / var(--tw-bg-opacity, 1));
@@ -1865,6 +1908,10 @@ video {
 
 .pt-6 {
   padding-top: 1.5rem;
+}
+
+.pl-4 {
+  padding-left: 1rem;
 }
 
 .text-left {
@@ -2105,6 +2152,10 @@ video {
   opacity: 0.5;
 }
 
+.opacity-75 {
+  opacity: 0.75;
+}
+
 .shadow {
   --tw-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
   --tw-shadow-colored: 0 1px 3px 0 var(--tw-shadow-color), 0 1px 2px -1px var(--tw-shadow-color);
@@ -2232,6 +2283,11 @@ video {
 .hover\:bg-amber-700:hover {
   --tw-bg-opacity: 1;
   background-color: rgb(180 83 9 / var(--tw-bg-opacity, 1));
+}
+
+.hover\:bg-blue-100:hover {
+  --tw-bg-opacity: 1;
+  background-color: rgb(219 234 254 / var(--tw-bg-opacity, 1));
 }
 
 .hover\:bg-blue-200:hover {

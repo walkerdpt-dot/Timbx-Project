@@ -1,10 +1,79 @@
 // js/firestore.js
 import {
     doc, getDoc, setDoc, addDoc, updateDoc, deleteDoc, 
-    collection, getDocs, query, where, writeBatch, serverTimestamp, orderBy
+    collection, getDocs, query, where, writeBatch, serverTimestamp, orderBy,
+    onSnapshot, limit
 } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
 import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-functions.js";
 import { app } from './state.js';
+
+// --- REAL-TIME LISTENER FUNCTIONS ---
+
+export function listenToProjectsForUser(db, userId, callback) {
+    const q = query(collection(db, "projects"), where("involvedUsers", "array-contains", userId));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+        const projects = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        callback(projects);
+    });
+    return unsubscribe; // Returns the function to stop the listener
+}
+
+export function listenToInquiriesForUser(db, userId, callback) {
+    const q = query(collection(db, "inquiries"), where("involvedUsers", "array-contains", userId));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+        const inquiries = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        callback(inquiries);
+    });
+    return unsubscribe;
+}
+
+export function listenToPropertiesForUser(db, userId, callback) {
+    const q = query(collection(db, "properties"), where("ownerId", "==", userId));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+        const properties = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        callback(properties);
+    });
+    return unsubscribe;
+}
+
+export function listenToHaulTicketsForUser(db, user, callback) {
+    let ticketsQuery;
+    const ticketsRef = collection(db, 'haulTickets');
+
+    if (user.role === 'landowner') {
+        ticketsQuery = query(ticketsRef, where('ownerId', '==', user.uid));
+    } else if (user.role === 'timber-buyer') {
+        ticketsQuery = query(ticketsRef, where('supplierId', '==', user.uid));
+    } else if (user.role === 'logging-contractor' || user.role === 'forester') {
+        ticketsQuery = query(ticketsRef, where('submitterId', '==', user.uid));
+    } else {
+        callback([]);
+        return () => {};
+    }
+
+    const unsubscribe = onSnapshot(ticketsQuery, (snapshot) => {
+        const tickets = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        callback(tickets);
+    }, (error) => {
+        console.error("Error listening to haul tickets:", error);
+    });
+
+    return unsubscribe;
+}
+
+export function listenToRecentActivity(db, userId, callback) {
+    const q = query(
+        collection(db, "activity"), 
+        where("involvedUsers", "array-contains", userId),
+        orderBy("timestamp", "desc"),
+        limit(15)
+    );
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+        const activities = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        callback(activities);
+    });
+    return unsubscribe;
+}
 
 // --- Cloud Function Callers ---
 export async function callAcceptQuote(quoteId, projectId) {
@@ -12,10 +81,9 @@ export async function callAcceptQuote(quoteId, projectId) {
     const acceptQuoteFunction = httpsCallable(functions, 'acceptQuote');
     try {
         const result = await acceptQuoteFunction({ quoteId, projectId });
-        return result.data; // e.g., { success: true, message: "..." }
+        return result.data;
     } catch (error) {
         console.error("Cloud Function Error:", error);
-        // Re-throw the error so the UI can catch it
         throw error;
     }
 }
@@ -105,30 +173,6 @@ export async function fetchQuotesForProject(db, projectIds, landownerId) {
     const querySnapshot = await getDocs(q);
     return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 }
-
-export async function fetchHaulTicketsForUser(db, user) {
-    if (!user) return [];
-     
-    let ticketsQuery;
-    const ticketsRef = collection(db, 'haulTickets');
-
-    if (user.role === 'landowner') {
-        ticketsQuery = query(ticketsRef, where('ownerId', '==', user.uid));
-    } else if (user.role === 'timber-buyer') {
-        ticketsQuery = query(ticketsRef, where('supplierId', '==', user.uid));
-    } else {
-        ticketsQuery = query(ticketsRef, where('submitterId', '==', user.uid));
-    }
-
-    try {
-        const snapshot = await getDocs(ticketsQuery);
-        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    } catch (error) {
-        console.error("Error fetching haul tickets:", error);
-        return [];
-    }
-}
-
 
 // --- Property Functions ---
 
@@ -224,10 +268,22 @@ export async function getTimberSaleById(db, saleId) {
     return docSnap.exists() ? { id: docSnap.id, ...docSnap.data() } : null;
 }
 
-// --- Project Feed Functions ---
-export async function saveProjectFeedEntry(db, projectId, user, message) {
-    const feedCollectionRef = collection(db, "projects", projectId, "feed");
-    await addDoc(feedCollectionRef, {
+// --- Activity & Chat Functions ---
+
+export async function createActivityEntry(db, activityData) {
+    try {
+        await addDoc(collection(db, "activity"), {
+            ...activityData,
+            timestamp: serverTimestamp()
+        });
+    } catch (error) {
+        console.error("Failed to create activity entry:", error);
+    }
+}
+
+export async function saveProjectMessage(db, projectId, user, message) {
+    const messagesCollectionRef = collection(db, "projects", projectId, "messages");
+    await addDoc(messagesCollectionRef, {
         userId: user.uid,
         username: user.username,
         profilePictureUrl: user.profilePictureUrl || null,
@@ -236,11 +292,14 @@ export async function saveProjectFeedEntry(db, projectId, user, message) {
     });
 }
 
-export async function fetchProjectFeed(db, projectId) {
-    const feedCollectionRef = collection(db, "projects", projectId, "feed");
-    const q = query(feedCollectionRef, orderBy("createdAt", "asc"));
-    const querySnapshot = await getDocs(q);
-    return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+export function listenToProjectMessages(db, projectId, callback) {
+    const messagesRef = collection(db, "projects", projectId, "messages");
+    const q = query(messagesRef, orderBy("createdAt", "asc"));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+        const messages = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        callback(messages);
+    });
+    return unsubscribe;
 }
 
 
@@ -257,7 +316,6 @@ export async function deleteHaulTicket(db, ticketId) {
     await deleteDoc(doc(db, "haulTickets", ticketId));
 }
 
-// NEW: Get a single haul ticket by its ID
 export async function getHaulTicketById(db, ticketId) {
     if (!ticketId) return null;
     const docRef = doc(db, "haulTickets", ticketId);
@@ -265,7 +323,6 @@ export async function getHaulTicketById(db, ticketId) {
     return docSnap.exists() ? { id: docSnap.id, ...docSnap.data() } : null;
 }
 
-// NEW: Update an existing haul ticket
 export async function updateHaulTicket(db, ticketId, ticketData) {
     const ticketRef = doc(db, "haulTickets", ticketId);
     await updateDoc(ticketRef, ticketData);

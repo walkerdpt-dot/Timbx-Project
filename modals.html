@@ -154,7 +154,7 @@
                  <span class="text-sm text-gray-600">Timber sales, appraisals, management plans, and professional advice.</span>
              </button>
               <button data-service-category="logging-contractor" class="service-category-btn w-full text-left p-4 border rounded-lg hover:bg-gray-100 hover:shadow-md transition">
-                 <span class="font-bold text-lg text-yellow-800">🚜 Timber Harvesting</span><br>
+                 <span class="font-bold text-lg text-yellow-800">🪓 Timber Harvesting</span><br>
                  <span class="text-sm text-gray-600">Connect with logging contractors for harvesting and hauling services.</span>
              </button>
              <button data-service-category="service-provider" class="service-category-btn w-full text-left p-4 border rounded-lg hover:bg-gray-100 hover:shadow-md transition">
@@ -411,20 +411,22 @@
      </div>
  </template>
 
-<div id="project-feed-modal" class="modal-overlay hidden">
-    <div class="modal-content max-w-2xl">
-        <span class="close-button close-modal-btn">&times;</span>
-        <h3 id="project-feed-title" class="text-2xl font-bold mb-4">Project Feed</h3>
+<div id="project-chat-modal" class="modal-overlay hidden">
+    <div class="modal-content max-w-2xl flex flex-col h-[70vh]">
+        <div class="flex-shrink-0">
+            <span class="close-button close-modal-btn">&times;</span>
+            <h3 id="project-chat-title" class="text-2xl font-bold">Project Chat</h3>
+            <div id="project-chat-participants" class="flex items-center space-x-2 border-b pb-2 mb-2 text-sm text-gray-600"></div>
+        </div>
         
-        <div id="project-feed-entries" class="space-y-4 max-h-[50vh] overflow-y-auto p-4 bg-gray-50 border rounded-md mb-4">
-            <p class="text-gray-500 text-center">Loading project history...</p>
+        <div id="project-chat-entries" class="flex-grow space-y-4 overflow-y-auto p-4 bg-gray-50 border rounded-md mb-4">
+            <p class="text-gray-500 text-center">Loading messages...</p>
         </div>
 
-        <form id="project-feed-form">
-            <input type="hidden" id="project-feed-project-id">
-            <label for="project-feed-message" class="font-semibold text-gray-700">Add a comment or update:</label>
-            <textarea id="project-feed-message" rows="3" class="w-full p-2 border rounded mt-1" placeholder="Type your message..." required></textarea>
-            <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md mt-2">Post Update</button>
+        <form id="project-chat-form" class="flex-shrink-0 flex gap-2">
+            <input type="hidden" id="project-chat-project-id">
+            <textarea id="project-chat-message" rows="1" class="flex-grow p-2 border rounded-md resize-none" placeholder="Type your message..." required></textarea>
+            <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md">Send</button>
         </form>
     </div>
 </div>

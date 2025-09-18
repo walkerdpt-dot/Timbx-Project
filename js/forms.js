@@ -3,8 +3,8 @@ import { doc, addDoc, collection, serverTimestamp, getDocs, query, where, delete
 import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-storage.js";
 import { db, currentUser, allProperties, allInquiries, allProjects, allProfessionalProfiles, setCurrentUser, app } from './state.js';
 import { onUserStatusChange } from './main.js';
-import { closeModal, openModal, renderInquiriesForCurrentUser, renderMyProfile, showConfirmationModal, renderProjectFeedEntries, renderMyLoads } from './ui.js';
-import { saveNewProperty, updateProperty, createNewInquiryProject, updateInquiryStatus, updateProject, saveTimberSale, saveHaulTicket, updateUserProfile, saveProjectRates, callAcceptQuote, saveProjectFeedEntry, updateHaulTicket } from './firestore.js';
+import { closeModal, openModal, renderInquiriesForCurrentUser, renderMyProfile, showConfirmationModal, renderMyLoads, showToast } from './ui.js';
+import { saveNewProperty, updateProperty, createNewInquiryProject, updateInquiryStatus, updateProject, saveTimberSale, saveHaulTicket, updateUserProfile, saveProjectRates, callAcceptQuote, saveProjectMessage, updateHaulTicket, createActivityEntry } from './firestore.js';
 import { getLastDrawnGeoJSON, getProjectAnnotationsAsGeoJSON, getUpdatedLocation } from './map.js';
 
 // --- Form Handlers ---
@@ -12,14 +12,14 @@ import { getLastDrawnGeoJSON, getProjectAnnotationsAsGeoJSON, getUpdatedLocation
 export async function handleSaveProperty(event) {
     event.preventDefault();
     if (!currentUser) {
-        alert("You must be logged in to save a property.");
+        showToast("You must be logged in to save a property.", "error");
         return;
     }
 
     const propertyName = document.getElementById('property-name').value.trim();
     const boundary = getLastDrawnGeoJSON();
     if (!propertyName || !boundary) {
-        alert("Please provide a Property Name and draw a boundary on the map.");
+        showToast("Please provide a Property Name and draw a boundary on the map.", "error");
         return;
     }
 
@@ -60,7 +60,7 @@ export async function handleSaveProperty(event) {
 
     } catch (error) {
         console.error("Error saving property:", error);
-        alert("Could not save property. Please try again.");
+        showToast("Could not save property. Please try again.", "error");
     } finally {
         submitButton.disabled = false;
         submitButton.textContent = 'Save Property';
@@ -69,7 +69,7 @@ export async function handleSaveProperty(event) {
 
 export async function handleTimberSaleSubmit(event) {
     event.preventDefault();
-    if (!currentUser) return alert("You must be logged in.");
+    if (!currentUser) return showToast("You must be logged in.", "error");
 
     const projectId = document.getElementById('timber-sale-property-id').value;
     const submitButton = event.target.querySelector('#btn-submit-sale-form');
@@ -170,14 +170,24 @@ export async function handleTimberSaleSubmit(event) {
         };
 
         await updateProject(db, projectId, payload);
-        alert("Cruise data submitted! The landowner has been notified for review.");
-          
+
+        const project = allProjects.find(p => p.id === projectId);
+        if (project) {
+            await createActivityEntry(db, {
+                involvedUsers: project.involvedUsers,
+                type: "CRUISE_SUBMITTED",
+                message: `${currentUser.username} submitted cruise data for the project on "${project.propertyName}".`,
+                link: `#add-edit-cruise?projectId=${projectId}`
+            });
+        }
+        
+        showToast("Cruise data submitted! The landowner has been notified for review.", "success");
         await onUserStatusChange(currentUser);
         window.location.hash = '#my-projects';
 
     } catch (error) {
         console.error("Error submitting cruise data:", error);
-        alert("There was an error submitting the cruise data.");
+        showToast("There was an error submitting the cruise data.", "error");
     } finally {
         submitButton.disabled = false;
         submitButton.textContent = 'Submit Cruise for Review';
@@ -195,12 +205,12 @@ export async function handleRetractCruise(projectId) {
         await updateProject(db, projectId, { 
             status: 'cruise_in_progress',
         });
-        alert("Cruise retracted successfully. You can now make edits.");
+        showToast("Cruise retracted successfully. You can now make edits.", "success");
         await onUserStatusChange(currentUser);
         window.location.hash = `#add-edit-cruise?projectId=${projectId}`; 
     } catch (error) {
         console.error("Error retracting cruise:", error);
-        alert("There was an error retracting the cruise. Please try again.");
+        showToast("There was an error retracting the cruise. Please try again.", "error");
     }
 }
 
@@ -227,13 +237,20 @@ export async function handleStartTimberSale(projectId) {
 
             await saveTimberSale(db, salePayload);
             await updateProject(db, projectId, { status: 'open_for_bids' });
+
+            await createActivityEntry(db, {
+                involvedUsers: project.involvedUsers,
+                type: "SALE_POSTED",
+                message: `The timber sale for "${project.propertyName}" is now live on the marketplace.`,
+                link: `#my-projects?projectId=${projectId}`
+            });
               
-            alert("Timber sale is now live on the marketplace!");
+            showToast("Timber sale is now live on the marketplace!", "success");
             await onUserStatusChange(currentUser);
             window.location.hash = '#my-projects';
         } catch (error) {
              console.error("Error starting timber sale:", error);
-            alert("There was an error starting the timber sale.");
+             showToast("There was an error starting the timber sale.", "error");
         }
       }
 }
@@ -246,19 +263,30 @@ export async function handleCompleteProject(projectId) {
     if (confirmed) {
         try {
             await updateProject(db, projectId, { status: 'completed' });
-            alert("Cruise accepted and project marked as complete!");
+            
+            const project = allProjects.find(p => p.id === projectId);
+            if (project) {
+                await createActivityEntry(db, {
+                    involvedUsers: project.involvedUsers,
+                    type: "PROJECT_COMPLETED",
+                    message: `The project on "${project.propertyName}" has been marked as complete.`,
+                    link: `#my-projects?projectId=${projectId}`
+                });
+            }
+
+            showToast("Cruise accepted and project marked as complete!", "success");
             await onUserStatusChange(currentUser);
             window.location.hash = '#my-projects';
         } catch (error) {
             console.error("Error completing project:", error);
-            alert("There was an error completing the project.");
+            showToast("There was an error completing the project.", "error");
         }
     }
 }
 
 export async function handleSubmitBidOrQuote(event) {
     event.preventDefault();
-    if (!currentUser) return alert("You must be logged in to submit.");
+    if (!currentUser) return showToast("You must be logged in to submit.", "error");
 
     const submitButton = event.target.querySelector('button[type="submit"]');
     submitButton.disabled = true;
@@ -291,10 +319,17 @@ export async function handleSubmitBidOrQuote(event) {
             await addDoc(collection(db, "quotes"), quoteData);
               
             await updateInquiryStatus(db, inquiryId, 'quoted');
+
+            await createActivityEntry(db, {
+                involvedUsers: [landownerId, currentUser.uid],
+                type: "QUOTE_SUBMITTED",
+                message: `${currentUser.username} submitted a quote for your project on "${inquiry.propertyName}".`,
+                link: `#my-projects?projectId=${inquiry.projectId}`
+            });
+
             await onUserStatusChange(currentUser);
             renderInquiriesForCurrentUser();
-
-            alert('Your quote has been sent to the Landowner!');
+            showToast('Your quote has been sent to the Landowner!', "success");
 
         } else {
             const bidData = {
@@ -309,14 +344,14 @@ export async function handleSubmitBidOrQuote(event) {
                 createdAt: serverTimestamp()
             };
             await addDoc(collection(db, "bids"), bidData);
-            alert('Your bid has been successfully submitted!');
+            showToast('Your bid has been successfully submitted!', "success");
         }
           
         closeModal('submit-quote-modal');
 
     } catch (error) {
         console.error("Error submitting quote/bid: ", error);
-        alert(`There was an error submitting. ${error.message}`);
+        showToast(`There was an error submitting. ${error.message}`, "error");
     } finally {
         submitButton.disabled = false;
         submitButton.textContent = 'Submit';
@@ -343,7 +378,7 @@ export async function handleSendInquiries(event) {
     const landownerMessage = document.getElementById('landowner-message').value.trim();
 
     if (selectedProfessionalIds.length === 0) {
-        alert("Please select at least one professional to send an inquiry to.");
+        showToast("Please select at least one professional to send an inquiry to.", "error");
         button.disabled = false;
         button.textContent = 'Send Inquiry';
         return;
@@ -351,7 +386,7 @@ export async function handleSendInquiries(event) {
       
     const roleTitle = document.getElementById('invite-modal-title').textContent;
     if (roleTitle.includes('Foresters') && services.length === 0) {
-        alert("Please select at least one service you are interested in.");
+        showToast("Please select at least one service you are interested in.", "error");
         button.disabled = false;
         button.textContent = 'Send Inquiry';
         return;
@@ -400,14 +435,14 @@ export async function handleSendInquiries(event) {
         await batch.commit();
           
         closeModal('invite-forester-modal');
-        alert(`Your detailed inquiry has been sent! You can track responses in "My Projects".`);
+        showToast(`Your detailed inquiry has been sent! You can track responses in "My Projects".`, "success");
           
         await onUserStatusChange(currentUser);
         window.location.hash = '#my-projects';
 
     } catch (error) {
         console.error("Error sending inquiries:", error);
-        alert(`There was an error sending your inquiries. ${error.message}`);
+        showToast(`There was an error sending your inquiries. ${error.message}`, "error");
     } finally {
         button.disabled = false;
         button.textContent = 'Send Inquiry';
@@ -427,14 +462,14 @@ export async function handleAcceptQuote(quoteId, projectId) {
     try {
         const result = await callAcceptQuote(quoteId, projectId);
         if (result.success) {
-            alert("Quote accepted successfully! The project has been updated.");
+            showToast("Quote accepted successfully! The project has been updated.", "success");
             closeModal('view-quotes-modal');
             await onUserStatusChange(currentUser);
             window.location.hash = '#my-projects';
         }
     } catch (error) {
         console.error("Failed to accept quote:", error);
-        alert(`Error: ${error.message}`);
+        showToast(`Error: ${error.message}`, "error");
     } finally {
         loadingOverlay.classList.add('hidden');
     }
@@ -448,10 +483,10 @@ export async function handleDeclineInquiry(event) {
         await updateInquiryStatus(db, inquiryId, 'declined');
         await onUserStatusChange(currentUser);
         closeModal('decline-modal');
-        alert("Inquiry declined.");
+        showToast("Inquiry declined.", "info");
     } catch (error) {
         console.error("Error declining inquiry:", error);
-        alert("Failed to decline inquiry. Please try again.");
+        showToast("Failed to decline inquiry. Please try again.", "error");
     }
 }
 
@@ -484,7 +519,7 @@ export async function handleCancelInquiry(inquiryId) {
           
     } catch (error) {
         console.error("Error withdrawing inquiry:", error);
-        alert("Failed to withdraw inquiry. Please try again.");
+        showToast("Failed to withdraw inquiry. Please try again.", "error");
     }
 }
 
@@ -501,12 +536,12 @@ export async function handleDeclineProject(projectId) {
             foresterId: deleteField(),
             quoteAcceptedAt: deleteField()
         });
-        alert("Project declined. The landowner has been notified.");
+        showToast("Project declined. The landowner has been notified.", "info");
         await onUserStatusChange(currentUser);
         window.location.hash = '#my-projects';
     } catch (error) {
         console.error("Error declining project:", error);
-        alert("Failed to decline project.");
+        showToast("Failed to decline project.", "error");
     }
 }
 
@@ -550,10 +585,10 @@ export async function handleUpdateProfile(event) {
         setCurrentUser({ ...currentUser, ...updatedData }); 
         renderMyProfile();
         closeModal('edit-profile-modal');
-        alert('Profile updated successfully!');
+        showToast('Profile updated successfully!', "success");
     } catch (error) {
         console.error("Error updating profile:", error);
-        alert("Failed to update profile. Please try again.");
+        showToast("Failed to update profile. Please try again.", "error");
     }
 }
 
@@ -593,7 +628,7 @@ export function getSignupOptionalData() {
 export async function handleLogLoadSubmit(event) {
     event.preventDefault();
     if (!currentUser) {
-        alert("You must be logged in to submit a ticket.");
+        showToast("You must be logged in to submit a ticket.", "error");
         return;
     }
       
@@ -641,13 +676,13 @@ export async function handleLogLoadSubmit(event) {
 
         await saveHaulTicket(db, ticketData);
 
-        alert("Haul ticket submitted successfully!");
+        showToast("Haul ticket submitted successfully!", "success");
         event.target.reset();
         document.getElementById('btn-view-loads').click();
 
     } catch (error) {
         console.error("Error submitting haul ticket:", error);
-        alert(`There was an error submitting your ticket: ${error.message}`);
+        showToast(`There was an error submitting your ticket: ${error.message}`, "error");
     } finally {
         submitButton.disabled = false;
         submitButton.textContent = 'Submit Ticket';
@@ -693,7 +728,7 @@ export async function handleSaveRateSheet(event) {
     });
 
     if (!isValid) {
-        alert("Please ensure every rate set has an effective date.");
+        showToast("Please ensure every rate set has an effective date.", "error");
         return;
     }
       
@@ -707,41 +742,38 @@ export async function handleSaveRateSheet(event) {
         if (projectIndex > -1) {
             allProjects[projectIndex].rateSets = rateSets;
         }
-        alert("Project rates saved successfully!");
+        showToast("Project rates saved successfully!", "success");
         closeModal('rate-sheet-modal');
     } catch (error) {
         console.error("Error saving rates:", error);
-        alert("Could not save project rates. Please try again.");
+        showToast("Could not save project rates. Please try again.", "error");
     } finally {
         submitButton.disabled = false;
         submitButton.textContent = 'Save All Rates';
     }
 }
 
-export async function handlePostFeedEntry(event) {
+export async function handleSendMessage(event) {
     event.preventDefault();
     if (!currentUser) return;
 
-    const projectId = document.getElementById('project-feed-project-id').value;
-    const messageInput = document.getElementById('project-feed-message');
+    const projectId = document.getElementById('project-chat-project-id').value;
+    const messageInput = document.getElementById('project-chat-message');
     const message = messageInput.value.trim();
     const submitButton = event.target.querySelector('button[type="submit"]');
 
     if (!message || !projectId) return;
 
     submitButton.disabled = true;
-    submitButton.textContent = 'Posting...';
 
     try {
-        await saveProjectFeedEntry(db, projectId, currentUser, message);
-        messageInput.value = ''; // Clear the textarea
-        await renderProjectFeedEntries(projectId); // Refresh the feed in the modal
+        await saveProjectMessage(db, projectId, currentUser, message);
+        messageInput.value = ''; 
     } catch (error) {
-        console.error("Error posting feed entry:", error);
-        alert("Could not post your update. Please try again.");
+        console.error("Error sending message:", error);
+        showToast("Could not send your message. Please try again.", "error");
     } finally {
         submitButton.disabled = false;
-        submitButton.textContent = 'Post Update';
     }
 }
 
@@ -780,13 +812,12 @@ export async function handleUpdateLoadSubmit(event) {
 
         await updateHaulTicket(db, ticketId, updatedData);
         
-        alert("Haul ticket updated successfully!");
+        showToast("Haul ticket updated successfully!", "success");
         closeModal('edit-load-modal');
-        await renderMyLoads();
 
     } catch (error) {
         console.error("Error updating haul ticket:", error);
-        alert("Failed to update haul ticket. Please try again.");
+        showToast("Failed to update haul ticket. Please try again.", "error");
     } finally {
         submitButton.disabled = false;
         submitButton.textContent = 'Save Changes';

@@ -4,14 +4,19 @@ import { getFirestore } from "https://www.gstatic.com/firebasejs/12.1.0/firebase
 import { signInWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
 import { firebaseConfig } from './config.js';
 import { initializeAuth, handleLogin, handleSignup, handleLogout } from './auth.js';
-import { getPropertyById, getProjectsForCurrentUser, getPropertiesForCurrentUser, fetchProfessionalProfiles, fetchTimberSales, fetchInquiriesForUser, updateInquiryStatus, deleteProperty, deleteHaulTicket } from './firestore.js';
+import { 
+    deleteProperty, deleteHaulTicket,
+    fetchProfessionalProfiles, fetchTimberSales,
+    listenToProjectsForUser, listenToInquiriesForUser, listenToPropertiesForUser,
+    listenToHaulTicketsForUser, listenToRecentActivity
+} from './firestore.js';
 import { getMapInstance, initGlobalMap } from './map.js';
 
 import {
-    db, auth, currentUser, allProperties,
+    db, auth, currentUser,
     setDb, setAuth, setCurrentUser, setApp,
     setAllProperties, setAllProjects, setAllProfessionalProfiles, setAllInquiries, setAllTimberSales,
-    setGlobalMarketplaceLayerGroup, globalMarketplaceLayerGroup
+    setGlobalMarketplaceLayerGroup, addActiveListener, clearActiveListeners, setAllHaulTickets, setAllActivities
 } from './state.js';
 
 import * as ui from './ui.js';
@@ -20,7 +25,7 @@ import {
     handleUpdateProfile, handleLogLoadSubmit, calculateNetWeight, handleSaveRateSheet,
     getSignupOptionalData, handleSendInquiries, handleAcceptQuote, handleCancelInquiry,
     handleTimberSaleSubmit, handleRetractCruise, handleCompleteProject, handleStartTimberSale,
-    handleDeclineProject, handlePostFeedEntry, handleUpdateLoadSubmit
+    handleDeclineProject, handleSendMessage, handleUpdateLoadSubmit
 } from './forms.js';
 
 // --- Constants ---
@@ -44,6 +49,7 @@ document.addEventListener('DOMContentLoaded', () => {
         attachAllEventListeners();
 
         window.addEventListener('hashchange', handleNavigation);
+        document.addEventListener('dataUpdated', () => handleNavigation());
          
     } catch (error) {
         console.error("FATAL ERROR during startup:", error);
@@ -51,61 +57,65 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 
-export function onUserStatusChange(user) {
+export async function onUserStatusChange(user) {
     const loadingOverlay = document.getElementById('loading-overlay');
+    loadingOverlay.classList.remove('hidden');
+
+    clearActiveListeners();
     setCurrentUser(user);
      
-    return new Promise(async (resolve) => {
-        if (user && user.uid) {
-            loadingOverlay.classList.remove('hidden');
-            try {
-                const projects = await getProjectsForCurrentUser(db, user.uid);
+    if (user && user.uid) {
+        try {
+            const [profiles, sales] = await Promise.all([
+                fetchProfessionalProfiles(db),
+                fetchTimberSales(db)
+            ]);
+            setAllProfessionalProfiles(profiles);
+            setAllTimberSales(sales);
+            
+            addActiveListener(listenToProjectsForUser(db, user.uid, (projects) => {
                 setAllProjects(projects);
+                document.dispatchEvent(new Event('dataUpdated'));
+            }));
 
-                const propertyIds = [...new Set(projects.map(p => p.propertyId))];
-                 
-                const propertyPromises = propertyIds.map(id =>
-                    getPropertyById(db, id).catch(error => {
-                        console.warn(`Could not fetch property ${id}, possibly due to permissions for a pending inquiry.`, error.message);
-                        return null;
-                    })
-                );
+            addActiveListener(listenToInquiriesForUser(db, user.uid, (inquiries) => {
+                setAllInquiries(inquiries);
+                document.dispatchEvent(new Event('dataUpdated'));
+            }));
+            
+            addActiveListener(listenToHaulTicketsForUser(db, user, (tickets) => {
+                setAllHaulTickets(tickets);
+                document.dispatchEvent(new Event('dataUpdated'));
+            }));
 
-                const [propertiesFromProjects, profiles, inquiries, sales] = await Promise.all([
-                    Promise.all(propertyPromises),
-                    fetchProfessionalProfiles(db),
-                    fetchInquiriesForUser(db, user.uid),
-                    fetchTimberSales(db)
-                ]);
-                 
-                const allUserProps = new Map();
-                propertiesFromProjects.forEach(p => p && allUserProps.set(p.id, p));
+            addActiveListener(listenToRecentActivity(db, user.uid, (activities) => {
+                setAllActivities(activities);
+                document.dispatchEvent(new Event('dataUpdated'));
+            }));
 
-                if (user.role === 'landowner') {
-                    const ownedProperties = await getPropertiesForCurrentUser(db, user.uid);
-                    ownedProperties.forEach(p => p && allUserProps.set(p.id, p));
-                }
-
-                setAllProperties(Array.from(allUserProps.values()));
-                setAllProfessionalProfiles(profiles);
-                setAllInquiries(inquiries || []);
-                setAllTimberSales(sales || []);
-
-            } catch (error) {
-                console.error("Failed to fetch initial marketplace data:", error);
-            } finally {
-                loadingOverlay.classList.add('hidden');
+            if (user.role === 'landowner') {
+                addActiveListener(listenToPropertiesForUser(db, user.uid, (properties) => {
+                    setAllProperties(properties);
+                    document.dispatchEvent(new Event('dataUpdated'));
+                }));
             }
-        } else {
-            setAllProperties([]);
-            setAllProjects([]);
-            setAllProfessionalProfiles([]);
-            setAllInquiries([]);
-            setAllTimberSales([]);
+            
+        } catch (error) {
+            console.error("Failed to fetch initial data or start listeners:", error);
+        } finally {
+            loadingOverlay.classList.add('hidden');
         }
-        ui.updateLoginUI();
-        resolve(); 
-    });
+    } else {
+        setAllProperties([]);
+        setAllProjects([]);
+        setAllProfessionalProfiles([]);
+        setAllInquiries([]);
+        setAllTimberSales([]);
+        setAllHaulTickets([]);
+        setAllActivities([]);
+        loadingOverlay.classList.add('hidden');
+    }
+    ui.updateLoginUI();
 }
 
 async function handleNavigation() {
@@ -145,7 +155,7 @@ async function handleNavigation() {
 async function renderMainSection(sectionId) {
     switch (sectionId) {
         case 'dashboard': 
-            await ui.renderDashboard();
+            ui.renderDashboard();
             break;
         case 'marketplace':
             let map = getMapInstance('global-map');
@@ -215,7 +225,12 @@ function attachAllEventListeners() {
 
     document.getElementById('login-button')?.addEventListener('click', () => ui.openModal('login-modal'));
     document.getElementById('signup-button')?.addEventListener('click', ui.openSignupModal);
-    document.getElementById('logout-button')?.addEventListener('click', () => handleLogout(auth));
+    
+    document.getElementById('logout-button')?.addEventListener('click', () => {
+        clearActiveListeners();
+        handleLogout(auth);
+    });
+
     document.getElementById('login-form')?.addEventListener('submit', async (e) => { e.preventDefault(); if (await handleLogin(auth)) ui.closeModal('login-modal'); });
     document.getElementById('signup-form')?.addEventListener('submit', async (e) => {
         e.preventDefault();
@@ -243,7 +258,7 @@ function attachAllEventListeners() {
     document.getElementById('rate-sheet-form')?.addEventListener('submit', handleSaveRateSheet);
     document.getElementById('timber-sale-form')?.addEventListener('submit', handleTimberSaleSubmit);
     document.getElementById('send-invites-btn')?.addEventListener('click', handleSendInquiries);
-    document.getElementById('project-feed-form')?.addEventListener('submit', handlePostFeedEntry);
+    document.getElementById('project-chat-form')?.addEventListener('submit', handleSendMessage);
     document.getElementById('edit-load-form')?.addEventListener('submit', handleUpdateLoadSubmit);
 
     document.getElementById('load-gross-weight')?.addEventListener('input', calculateNetWeight);
@@ -273,7 +288,7 @@ function attachAllEventListeners() {
 
         const { dataset, id, classList } = target;
 
-        if (classList.contains('view-project-feed-btn')) ui.openProjectFeedModal(dataset.projectId);
+        if (classList.contains('view-project-chat-btn')) ui.openProjectChatModal(dataset.projectId);
         else if (classList.contains('edit-load-btn')) ui.openEditLoadModal(dataset.ticketId);
         else if (classList.contains('submit-quote-action-btn')) ui.openForesterQuoteModal(dataset.inquiryId);
         else if (classList.contains('decline-inquiry-btn')) ui.openDeclineModal(dataset.inquiryId);
@@ -302,7 +317,6 @@ function attachAllEventListeners() {
             );
             if (confirmed) {
                 await updateInquiryStatus(db, dataset.inquiryId, 'archived');
-                ui.renderInquiriesForCurrentUser();
             }
         } else if (classList.contains('delete-property-btn')) {
             const confirmed = await ui.showConfirmationModal(
@@ -311,7 +325,6 @@ function attachAllEventListeners() {
             );
             if (confirmed) {
                 await deleteProperty(db, dataset.propertyId);
-                await onUserStatusChange(currentUser);
             }
         } else if (classList.contains('delete-load-btn')) {
             const confirmed = await ui.showConfirmationModal(
@@ -320,7 +333,6 @@ function attachAllEventListeners() {
             );
             if (confirmed) {
                 await deleteHaulTicket(db, dataset.ticketId);
-                ui.renderMyLoads();
             }
         } else if (classList.contains('more-options-btn')) {
             const dropdown = target.nextElementSibling;

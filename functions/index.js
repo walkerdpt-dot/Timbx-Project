@@ -41,7 +41,6 @@ exports.acceptQuote = functions.region("us-central1").https.onCall(async (data, 
       );
     }
      
-    // --- NEW SERVER-SIDE VALIDATION ---
     // 3. Check if a professional is already assigned to prevent duplicates.
     if (projectData.foresterId || projectData.supplierId) {
         throw new functions.https.HttpsError(
@@ -61,6 +60,7 @@ exports.acceptQuote = functions.region("us-central1").https.onCall(async (data, 
     const professionalId = quoteData.professionalId;
     const propertyId = quoteData.propertyId;
     const professionalRole = quoteData.professionalRole;
+    const professionalName = quoteData.professionalName;
 
     // 5. Prepare the updates
     let projectUpdateData = {};
@@ -83,6 +83,16 @@ exports.acceptQuote = functions.region("us-central1").https.onCall(async (data, 
     }
      
     const propertyRef = db.collection("properties").doc(propertyId);
+     
+    // NEW: Create an activity feed entry
+    const activityRef = db.collection("activity").doc();
+    const activityData = {
+        involvedUsers: [landownerUid, professionalId],
+        timestamp: admin.firestore.FieldValue.serverTimestamp(),
+        type: "QUOTE_ACCEPTED",
+        message: `${projectData.ownerName} accepted the quote from ${professionalName} for the project on "${projectData.propertyName}".`,
+        link: `#my-projects?projectId=${projectId}`
+    };
 
     // 6. Run all database writes in a single atomic batch
     const batch = db.batch();
@@ -90,6 +100,7 @@ exports.acceptQuote = functions.region("us-central1").https.onCall(async (data, 
     batch.update(propertyRef, { 
       authorizedUsers: admin.firestore.FieldValue.arrayUnion(professionalId) 
     });
+    batch.set(activityRef, activityData);
      
     await batch.commit();
 

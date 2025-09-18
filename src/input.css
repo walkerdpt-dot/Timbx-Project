@@ -68,19 +68,12 @@ body {
 
 
 /* =================================================================== */ 
-/* Modal & Overlay Styles (CORRECTED SELECTORS)                        */ 
+/* Modal & Overlay Styles (CORRECTED & REFACTORED)                     */ 
 /* =================================================================== */ 
 
-#login-modal:not(.hidden),
-#service-select-modal:not(.hidden),
-#invite-forester-modal:not(.hidden),
-#view-inquiry-modal:not(.hidden),
-#submit-quote-modal:not(.hidden),
-#view-quotes-modal:not(.hidden),
-#info-modal:not(.hidden),
-#confirmation-modal:not(.hidden),
-#project-feed-modal:not(.hidden),
-#edit-load-modal:not(.hidden),
+/* This now targets the .modal-overlay class shared by ALL modals,
+   making it more robust and preventing this issue in the future. */
+.modal-overlay:not(.hidden),
 .full-page-section:not(.hidden) { 
     position: fixed; 
     top: 0; 
