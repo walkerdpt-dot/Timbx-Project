@@ -6,7 +6,6 @@ const db = admin.firestore();
 
 exports.acceptQuote = functions.region("us-central1").https.onCall(async (data, context) => {
   // 1. Firebase's 'onCall' trigger automatically checks for authentication.
-  // If the user isn't logged in, 'context.auth' will be null and the function will exit.
   if (!context.auth) {
     throw new functions.https.HttpsError(
       "unauthenticated",
@@ -41,20 +40,29 @@ exports.acceptQuote = functions.region("us-central1").https.onCall(async (data, 
         "You do not have permission to modify this project."
       );
     }
-    
-    // 3. Get the quote to find the professional's ID and property ID
+     
+    // --- NEW SERVER-SIDE VALIDATION ---
+    // 3. Check if a professional is already assigned to prevent duplicates.
+    if (projectData.foresterId || projectData.supplierId) {
+        throw new functions.https.HttpsError(
+            "failed-precondition",
+            "A professional has already been assigned to this project. Please refresh the page."
+        );
+    }
+     
+    // 4. Get the quote to find the professional's ID and property ID
     const quoteDoc = await db.collection("quotes").doc(quoteId).get();
 
     if (!quoteDoc.exists) {
         throw new functions.https.HttpsError("not-found", "Quote not found.");
     }
-    
+     
     const quoteData = quoteDoc.data();
     const professionalId = quoteData.professionalId;
     const propertyId = quoteData.propertyId;
     const professionalRole = quoteData.professionalRole;
 
-    // 4. Prepare the updates
+    // 5. Prepare the updates
     let projectUpdateData = {};
     if (professionalRole === 'forester') {
         projectUpdateData = {
@@ -63,7 +71,7 @@ exports.acceptQuote = functions.region("us-central1").https.onCall(async (data, 
             quoteAcceptedAt: admin.firestore.FieldValue.serverTimestamp(),
             involvedUsers: admin.firestore.FieldValue.arrayUnion(professionalId)
         };
-    } else if (professionalRole === 'timber-buyer') {
+    } else if (professionalRole === 'timber-buyer' || professionalRole === 'logging-contractor') {
         projectUpdateData = {
             status: 'harvest_in_progress',
             supplierId: professionalId,
@@ -73,23 +81,22 @@ exports.acceptQuote = functions.region("us-central1").https.onCall(async (data, 
     } else {
         throw new functions.https.HttpsError("failed-precondition", "Invalid professional role for this action.");
     }
-    
+     
     const propertyRef = db.collection("properties").doc(propertyId);
 
-    // 5. Run all database writes in a single atomic batch
+    // 6. Run all database writes in a single atomic batch
     const batch = db.batch();
     batch.update(projectRef, projectUpdateData);
     batch.update(propertyRef, { 
       authorizedUsers: admin.firestore.FieldValue.arrayUnion(professionalId) 
     });
-    
+     
     await batch.commit();
 
     return { success: true, message: "Quote accepted successfully!" };
 
   } catch (error) {
     console.error("Error in acceptQuote function:", error);
-    // Re-throw errors as HttpsError so the client can handle them
     if (error instanceof functions.https.HttpsError) {
       throw error;
     }

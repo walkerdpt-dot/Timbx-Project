@@ -1,14 +1,14 @@
 // js/firestore.js
 import {
     doc, getDoc, setDoc, addDoc, updateDoc, deleteDoc, 
-    collection, getDocs, query, where, writeBatch, serverTimestamp 
+    collection, getDocs, query, where, writeBatch, serverTimestamp, orderBy
 } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
 import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-functions.js";
-import { app } from './state.js'; // ADDED: Import the app instance from the state
+import { app } from './state.js';
 
 // --- Cloud Function Callers ---
 export async function callAcceptQuote(quoteId, projectId) {
-    const functions = getFunctions(app); // Use the imported app instance
+    const functions = getFunctions(app);
     const acceptQuoteFunction = httpsCallable(functions, 'acceptQuote');
     try {
         const result = await acceptQuoteFunction({ quoteId, projectId });
@@ -218,11 +218,29 @@ export async function saveTimberSale(db, saleData) {
     });
 }
 
-// --- NEW FUNCTION ---
 export async function getTimberSaleById(db, saleId) {
     const docRef = doc(db, "timberSales", saleId);
     const docSnap = await getDoc(docRef);
     return docSnap.exists() ? { id: docSnap.id, ...docSnap.data() } : null;
+}
+
+// --- Project Feed Functions ---
+export async function saveProjectFeedEntry(db, projectId, user, message) {
+    const feedCollectionRef = collection(db, "projects", projectId, "feed");
+    await addDoc(feedCollectionRef, {
+        userId: user.uid,
+        username: user.username,
+        profilePictureUrl: user.profilePictureUrl || null,
+        message: message,
+        createdAt: serverTimestamp()
+    });
+}
+
+export async function fetchProjectFeed(db, projectId) {
+    const feedCollectionRef = collection(db, "projects", projectId, "feed");
+    const q = query(feedCollectionRef, orderBy("createdAt", "asc"));
+    const querySnapshot = await getDocs(q);
+    return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 }
 
 
@@ -238,6 +256,21 @@ export async function saveHaulTicket(db, ticketData) {
 export async function deleteHaulTicket(db, ticketId) {
     await deleteDoc(doc(db, "haulTickets", ticketId));
 }
+
+// NEW: Get a single haul ticket by its ID
+export async function getHaulTicketById(db, ticketId) {
+    if (!ticketId) return null;
+    const docRef = doc(db, "haulTickets", ticketId);
+    const docSnap = await getDoc(docRef);
+    return docSnap.exists() ? { id: docSnap.id, ...docSnap.data() } : null;
+}
+
+// NEW: Update an existing haul ticket
+export async function updateHaulTicket(db, ticketId, ticketData) {
+    const ticketRef = doc(db, "haulTickets", ticketId);
+    await updateDoc(ticketRef, ticketData);
+}
+
 
 // --- Rate Sheet Functions ---
 

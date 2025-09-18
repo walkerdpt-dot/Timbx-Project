@@ -1,293 +1,493 @@
 <div id="login-modal" class="modal-overlay hidden">
+     <div class="modal-content">
+         <span class="close-button close-modal-btn">&times;</span>
+         <h3 class="text-2xl font-bold mb-4">Login</h3>
+         <form id="login-form">
+             <div class="mb-4">
+                 <label for="login-email" class="block text-gray-700">Email</label>
+                 <input type="email" id="login-email" class="w-full p-2 border rounded" required autocomplete="email">
+             </div>
+             <div class="mb-4">
+                 <label for="login-password" class="block text-gray-700">Password</label>
+                 <input type="password" id="login-password" class="w-full p-2 border rounded" required autocomplete="current-password">
+             </div>
+             <button type="submit" class="w-full bg-green-700 text-white p-2 rounded">Login</button>
+             <div id="login-message" class="text-red-500 mt-2 hidden"></div>
+             <p class="mt-4 text-center">
+                 Don't have an account? <a href="#" id="show-signup-from-login-link" class="text-blue-600">Sign up</a>
+             </p>
+         </form>
+
+         <div class="mt-6 border-t pt-4">
+            <h3 class="text-lg font-semibold text-gray-700 mb-2 text-center">Quick Demo Access</h3>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
+                <button data-demo-role="landowner" class="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-2 rounded-md font-semibold transition duration-200">Landowner</button>
+                <button data-demo-role="forester" class="bg-lime-700 hover:bg-lime-600 text-white px-3 py-2 rounded-md font-semibold transition duration-200">Forester</button>
+                <button data-demo-role="timber-buyer" class="bg-teal-600 hover:bg-teal-500 text-white px-3 py-2 rounded-md font-semibold transition duration-200">Timber Buyer</button>
+                <button data-demo-role="logging-contractor" class="bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-2 rounded-md font-semibold transition duration-200">Logger</button>
+            </div>
+        </div>
+     </div>
+ </div>
+
+
+ <div id="signup-modal" class="full-page-section hidden">
+     <div class="modal-content">
+         <span class="close-button close-modal-btn">&times;</span>
+         <h3 class="text-2xl font-bold mb-4">Create Your Account</h3>
+         <form id="signup-form" class="space-y-4">
+             <input type="email" id="signup-email" placeholder="Email" class="w-full p-2 border rounded" required autocomplete="email">
+             <input type="password" id="signup-password" placeholder="Password" class="w-full p-2 border rounded" required autocomplete="new-password">
+             <input type="text" id="signup-username" placeholder="Full Name or Business Name" class="w-full p-2 border rounded" required autocomplete="name">
+               
+             <select id="signup-role" class="w-full p-2 border rounded" required>
+                 <option value="">Select Your Role...</option>
+                 <option value="landowner">Landowner</option>
+                 <option value="forester">Forester</option>
+                 <option value="timber-buyer">Timber Buyer</option>
+                 <option value="logging-contractor">Logging Contractor</option>
+                 <option value="service-provider">Service Provider</option>
+             </select>
+
+             <div id="signup-role-specific-container" class="hidden space-y-4 pt-4 border-t">
+                 <input type="text" id="signup-company" placeholder="Company Name (Optional)" class="w-full p-2 border rounded" autocomplete="organization">
+                 <textarea id="signup-bio" placeholder="Brief Bio (Optional)" class="w-full p-2 border rounded"></textarea>
+                 <input type="url" id="signup-profile-picture-url" placeholder="Profile Picture URL (Optional)" class="w-full p-2 border rounded">
+                   
+                 <div class="space-y-2">
+                     <label class="font-bold">Primary Location / Service Area Center</label>
+                     <div id="signup-map" class="w-full h-64 rounded border"></div>
+                     <label for="signup-service-radius-slider">Service Radius: <span id="signup-service-radius-value" class="font-bold">50</span> miles</label>
+                     <input type="range" id="signup-service-radius-slider" min="5" max="250" value="50" class="w-full">
+                 </div>
+
+                 <div id="signup-forester-details" class="hidden">
+                     <h4 class="font-bold text-lg">Forester Details</h4>
+                     <input type="number" id="signup-forester-experience" placeholder="Years of Experience" class="w-full p-2 border rounded">
+                     <input type="text" id="signup-forester-certs" placeholder="Certifications (e.g., SAF, State Registered)" class="w-full p-2 border rounded">
+                     <div id="signup-forester-specialties" class="grid grid-cols-2 gap-2 p-2 border rounded"></div>
+                 </div>
+                 <div id="signup-buyer-details" class="hidden">
+                     <h4 class="font-bold text-lg">Timber Buyer Details</h4>
+                     <input type="text" id="signup-buyer-mills" placeholder="Primary Mill Locations" class="w-full p-2 border rounded">
+                     <div id="signup-buyer-products" class="grid grid-cols-2 gap-2 p-2 border rounded"></div>
+                 </div>
+                  <div id="signup-logging-contractor-details" class="hidden">
+                     <h4 class="font-bold text-lg">Logging Contractor Details</h4>
+                      <input type="number" id="signup-logger-experience" placeholder="Years of Experience" class="w-full p-2 border rounded">
+                     <input type="text" id="signup-logger-equipment" placeholder="Primary Equipment (e.g., Feller Buncher, Knuckleboom)" class="w-full p-2 border rounded">
+                     <label class="flex items-center"><input type="checkbox" id="signup-logger-insurance" class="mr-2"> Fully Insured</label>
+                     <div id="signup-logger-services" class="grid grid-cols-2 gap-2 p-2 border rounded"></div>
+                 </div>
+                  <div id="signup-service-provider-details" class="hidden">
+                      <h4 class="font-bold text-lg">Service Provider Details</h4>
+                      <label class="flex items-center"><input type="checkbox" id="signup-service-insurance" class="mr-2"> Fully Insured</label>
+                     <div id="signup-service-provider-services" class="grid grid-cols-2 gap-2 p-2 border rounded"></div>
+                 </div>
+             </div>
+
+             <button type="submit" class="w-full bg-green-700 text-white p-3 rounded font-bold">Sign Up</button>
+             <div id="signup-message" class="text-red-500 mt-2 hidden"></div>
+             <p class="mt-4 text-center">
+                 Already have an account? <a href="#" id="show-login-from-signup-link" class="text-blue-600">Login</a>
+             </p>
+         </form>
+     </div>
+ </div>
+ 
+ <div id="edit-profile-modal" class="full-page-section hidden">
     <div class="modal-content">
         <span class="close-button close-modal-btn">&times;</span>
-        <h3 class="text-2xl font-bold mb-4">Login</h3>
-        <form id="login-form">
-            <div class="mb-4">
-                <label for="login-email" class="block text-gray-700">Email</label>
-                <input type="email" id="login-email" class="w-full p-2 border rounded" required autocomplete="email">
-            </div>
-            <div class="mb-4">
-                <label for="login-password" class="block text-gray-700">Password</label>
-                <input type="password" id="login-password" class="w-full p-2 border rounded" required autocomplete="current-password">
-            </div>
-            <button type="submit" class="w-full bg-green-700 text-white p-2 rounded">Login</button>
-            <div id="login-message" class="text-red-500 mt-2 hidden"></div>
-            <p class="mt-4 text-center">
-                Don't have an account? <a href="#" id="show-signup-from-login-link" class="text-blue-600">Sign up</a>
-            </p>
-        </form>
-    </div>
-</div>
-
-
-<div id="signup-modal" class="full-page-section hidden">
-    <div class="modal-content">
-        <span class="close-button close-modal-btn">&times;</span>
-        <h3 class="text-2xl font-bold mb-4">Create Your Account</h3>
-        <form id="signup-form" class="space-y-4">
-            <input type="email" id="signup-email" placeholder="Email" class="w-full p-2 border rounded" required autocomplete="email">
-            <input type="password" id="signup-password" placeholder="Password" class="w-full p-2 border rounded" required autocomplete="new-password">
-            <input type="text" id="signup-username" placeholder="Full Name or Business Name" class="w-full p-2 border rounded" required autocomplete="name">
-             
-            <select id="signup-role" class="w-full p-2 border rounded" required>
-                <option value="">Select Your Role...</option>
-                <option value="landowner">Landowner</option>
-                <option value="forester">Forester</option>
-                <option value="timber-buyer">Timber Buyer</option>
-                <option value="logging-contractor">Logging Contractor</option>
-                <option value="service-provider">Service Provider</option>
-            </select>
-
-            <div id="signup-role-specific-container" class="hidden space-y-4 pt-4 border-t">
-                <input type="text" id="signup-company" placeholder="Company Name (Optional)" class="w-full p-2 border rounded" autocomplete="organization">
-                <textarea id="signup-bio" placeholder="Brief Bio (Optional)" class="w-full p-2 border rounded"></textarea>
-                <input type="url" id="signup-profile-picture-url" placeholder="Profile Picture URL (Optional)" class="w-full p-2 border rounded">
-                 
-                <div class="space-y-2">
+        <h3 class="text-2xl font-bold mb-4">Edit Profile</h3>
+        <form id="edit-profile-form" class="space-y-4">
+            <input type="text" id="edit-username" placeholder="Full Name or Business Name" class="w-full p-2 border rounded" required autocomplete="name">
+            <input type="text" id="edit-company" placeholder="Company Name (Optional)" class="w-full p-2 border rounded" autocomplete="organization">
+            <textarea id="edit-bio" placeholder="Brief Bio (Optional)" class="w-full p-2 border rounded"></textarea>
+            <input type="url" id="edit-profile-picture-url" placeholder="Profile Picture URL (Optional)" class="w-full p-2 border rounded">
+            
+            <div id="edit-role-specific-container" class="space-y-4 pt-4 border-t">
+                <div id="edit-profile-map-container" class="space-y-2 hidden">
                     <label class="font-bold">Primary Location / Service Area Center</label>
-                    <div id="signup-map" class="w-full h-64 rounded border"></div>
-                    <label for="signup-service-radius-slider">Service Radius: <span id="signup-service-radius-value" class="font-bold">50</span> miles</label>
-                    <input type="range" id="signup-service-radius-slider" min="5" max="250" value="50" class="w-full">
+                    <div id="edit-profile-map" class="w-full h-64 rounded border"></div>
+                    <label for="edit-service-radius-slider">Service Radius: <span id="edit-service-radius-value" class="font-bold">50</span> miles</label>
+                    <input type="range" id="edit-service-radius-slider" min="5" max="250" value="50" class="w-full">
                 </div>
 
-                <div id="signup-forester-details" class="hidden">
+                <div id="edit-forester-details" class="hidden">
                     <h4 class="font-bold text-lg">Forester Details</h4>
-                    <input type="number" id="signup-forester-experience" placeholder="Years of Experience" class="w-full p-2 border rounded">
-                    <input type="text" id="signup-forester-certs" placeholder="Certifications (e.g., SAF, State Registered)" class="w-full p-2 border rounded">
-                    <div id="signup-forester-specialties" class="grid grid-cols-2 gap-2 p-2 border rounded"></div>
+                    <input type="number" id="edit-forester-experience" placeholder="Years of Experience" class="w-full p-2 border rounded">
+                    <input type="text" id="edit-forester-certs" placeholder="Certifications (e.g., SAF, State Registered)" class="w-full p-2 border rounded">
+                    <div id="edit-forester-specialties" class="grid grid-cols-2 gap-2 p-2 border rounded"></div>
                 </div>
-                <div id="signup-buyer-details" class="hidden">
+                <div id="edit-timber-buyer-details" class="hidden">
                     <h4 class="font-bold text-lg">Timber Buyer Details</h4>
-                    <input type="text" id="signup-buyer-mills" placeholder="Primary Mill Locations" class="w-full p-2 border rounded">
-                    <div id="signup-buyer-products" class="grid grid-cols-2 gap-2 p-2 border rounded"></div>
+                    <input type="text" id="edit-buyer-mills" placeholder="Primary Mill Locations" class="w-full p-2 border rounded">
+                    <div id="edit-buyer-products" class="grid grid-cols-2 gap-2 p-2 border rounded"></div>
                 </div>
-                 <div id="signup-logging-contractor-details" class="hidden">
+                <div id="edit-logging-contractor-details" class="hidden">
                     <h4 class="font-bold text-lg">Logging Contractor Details</h4>
-                     <input type="number" id="signup-logger-experience" placeholder="Years of Experience" class="w-full p-2 border rounded">
-                    <input type="text" id="signup-logger-equipment" placeholder="Primary Equipment (e.g., Feller Buncher, Knuckleboom)" class="w-full p-2 border rounded">
-                    <label class="flex items-center"><input type="checkbox" id="signup-logger-insurance" class="mr-2"> Fully Insured</label>
-                    <div id="signup-logger-services" class="grid grid-cols-2 gap-2 p-2 border rounded"></div>
+                    <input type="number" id="edit-logger-experience" placeholder="Years of Experience" class="w-full p-2 border rounded">
+                    <input type="text" id="edit-logger-equipment" placeholder="Primary Equipment (e.g., Feller Buncher, Knuckleboom)" class="w-full p-2 border rounded">
+                    <label class="flex items-center"><input type="checkbox" id="edit-logger-insurance" class="mr-2"> Fully Insured</label>
+                    <div id="edit-logger-services" class="grid grid-cols-2 gap-2 p-2 border rounded"></div>
                 </div>
-                 <div id="signup-service-provider-details" class="hidden">
-                     <h4 class="font-bold text-lg">Service Provider Details</h4>
-                     <label class="flex items-center"><input type="checkbox" id="signup-service-insurance" class="mr-2"> Fully Insured</label>
-                    <div id="signup-service-provider-services" class="grid grid-cols-2 gap-2 p-2 border rounded"></div>
+                <div id="edit-service-provider-details" class="hidden">
+                    <h4 class="font-bold text-lg">Service Provider Details</h4>
+                    <label class="flex items-center"><input type="checkbox" id="edit-service-insurance" class="mr-2"> Fully Insured</label>
+                    <div id="edit-service-provider-services" class="grid grid-cols-2 gap-2 p-2 border rounded"></div>
                 </div>
             </div>
 
-            <button type="submit" class="w-full bg-green-700 text-white p-3 rounded font-bold">Sign Up</button>
-            <div id="signup-message" class="text-red-500 mt-2 hidden"></div>
-            <p class="mt-4 text-center">
-                Already have an account? <a href="#" id="show-login-from-signup-link" class="text-blue-600">Login</a>
-            </p>
+            <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white p-3 rounded font-bold">Save Changes</button>
         </form>
     </div>
-</div>
+ </div>
 
-<div id="service-select-modal" class="modal-overlay hidden">
-    <div class="modal-content">
-        <span class="close-button close-modal-btn">&times;</span>
-        <h3 class="text-2xl font-bold mb-1">Seek Services</h3>
-        <p class="mb-4">For property: <span id="service-modal-property-name" class="font-bold"></span></p>
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-             <button data-service-category="Forestry" class="service-category-btn w-full text-left p-4 border rounded-lg hover:bg-gray-100 hover:shadow-md transition">
-                <span class="font-bold text-lg text-green-800">🌳 Forestry Consulting</span><br>
-                <span class="text-sm text-gray-600">Timber sales, appraisals, management plans, and professional advice.</span>
-            </button>
-             <button data-service-category="Harvesting" class="service-category-btn w-full text-left p-4 border rounded-lg hover:bg-gray-100 hover:shadow-md transition">
-                <span class="font-bold text-lg text-yellow-800">🚜 Timber Harvesting</span><br>
-                <span class="text-sm text-gray-600">Connect with logging contractors for harvesting and hauling services.</span>
-            </button>
-            <button data-service-category="Land Management" class="service-category-btn w-full text-left p-4 border rounded-lg hover:bg-gray-100 hover:shadow-md transition">
-                <span class="font-bold text-lg text-blue-800">🌱 Land Management</span><br>
-                <span class="text-sm text-gray-600">Find providers for site prep, planting, burning, and road work.</span>
-            </button>
-             <button data-service-category="Direct Sale" class="service-category-btn w-full text-left p-4 border rounded-lg hover:bg-gray-100 hover:shadow-md transition">
-                <span class="font-bold text-lg text-stone-800">💰 Direct to Buyer</span><br>
-                <span class="text-sm text-gray-600">List your timber for sale and solicit bids directly from timber buyers.</span>
-            </button>
-        </div>
-    </div>
-</div>
+ <div id="service-select-modal" class="modal-overlay hidden">
+     <div class="modal-content">
+         <span class="close-button close-modal-btn">&times;</span>
+         <h3 class="text-2xl font-bold mb-1">Seek Services</h3>
+         <p class="mb-4">For property: <span id="service-modal-property-name" class="font-bold"></span></p>
+         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <button data-service-category="forester" class="service-category-btn w-full text-left p-4 border rounded-lg hover:bg-gray-100 hover:shadow-md transition">
+                 <span class="font-bold text-lg text-green-800">🌳 Forestry Consulting</span><br>
+                 <span class="text-sm text-gray-600">Timber sales, appraisals, management plans, and professional advice.</span>
+             </button>
+              <button data-service-category="logging-contractor" class="service-category-btn w-full text-left p-4 border rounded-lg hover:bg-gray-100 hover:shadow-md transition">
+                 <span class="font-bold text-lg text-yellow-800">🚜 Timber Harvesting</span><br>
+                 <span class="text-sm text-gray-600">Connect with logging contractors for harvesting and hauling services.</span>
+             </button>
+             <button data-service-category="service-provider" class="service-category-btn w-full text-left p-4 border rounded-lg hover:bg-gray-100 hover:shadow-md transition">
+                 <span class="font-bold text-lg text-blue-800">🌱 Land Management</span><br>
+                 <span class="text-sm text-gray-600">Find providers for site prep, planting, burning, and road work.</span>
+             </button>
+              <button data-service-category="timber-buyer" class="service-category-btn w-full text-left p-4 border rounded-lg hover:bg-gray-100 hover:shadow-md transition">
+                 <span class="font-bold text-lg text-stone-800">💰 Direct to Buyer</span><br>
+                 <span class="text-sm text-gray-600">List your timber for sale and solicit bids directly from timber buyers.</span>
+             </button>
+         </div>
+     </div>
+ </div>
 
-<div id="invite-forester-modal" class="modal-overlay hidden">
-    <div class="modal-content max-w-3xl">
-        <span class="close-button close-modal-btn">&times;</span>
-        <h3 class="text-2xl font-bold mb-1">Invite Foresters</h3>
-        <p class="mb-4">For property: <span id="invite-modal-property-name" class="font-bold"></span></p>
-         
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-                <h4 class="font-bold text-lg">1. Select Nearby Foresters</h4>
-                <div id="forester-invite-list" class="space-y-2 max-h-96 overflow-y-auto p-2 border rounded mt-2"></div>
-            </div>
-            <div>
-                <h4 class="font-bold text-lg">2. Describe Your Needs</h4>
-                <div class="space-y-3 mt-2">
-                    <div>
-                        <label class="font-semibold text-sm">What is your primary goal?</label>
-                        <div class="flex flex-col text-sm mt-1">
-                            <label class="p-1 rounded hover:bg-gray-100"><input type="radio" name="landowner-goal" value="Maximize Income" checked> Maximize Immediate Income</label>
-                            <label class="p-1 rounded hover:bg-gray-100"><input type="radio" name="landowner-goal" value="Forest Health"> Improve Forest Health & Wildlife</label>
-                            <label class="p-1 rounded hover:bg-gray-100"><input type="radio" name="landowner-goal" value="Long-term Value"> Long-term Investment Value</label>
-                            <label class="p-1 rounded hover:bg-gray-100"><input type="radio" name="landowner-goal" value="Other"> Other / General Advice</label>
-                        </div>
-                    </div>
+ <div id="invite-forester-modal" class="modal-overlay hidden">
+     <div class="modal-content max-w-3xl">
+         <span class="close-button close-modal-btn">&times;</span>
+         <h3 id="invite-modal-title" class="text-2xl font-bold mb-1">Invite Professionals</h3>
+         <p class="mb-4">For property: <span id="invite-modal-property-name" class="font-bold"></span></p>
+           
+         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+             <div>
+                 <h4 class="font-bold text-lg">1. Select Nearby Professionals</h4>
+                 <div id="forester-invite-list" class="space-y-2 max-h-96 overflow-y-auto p-2 border rounded mt-2"></div>
+             </div>
+             <div>
+                 <h4 class="font-bold text-lg">2. Describe Your Needs</h4>
+                 <div class="space-y-3 mt-2">
                      <div>
-                        <label class="font-semibold text-sm">Which services are you interested in?</label>
-                        <div id="forester-service-checkboxes" class="grid grid-cols-1 text-sm mt-1">
-                            <label class="p-1 rounded hover:bg-gray-100"><input type="checkbox" value="Timber Cruising & Appraisal"> Timber Cruising & Appraisal</label>
-                            <label class="p-1 rounded hover:bg-gray-100"><input type="checkbox" value="Timber Sale Administration"> Timber Sale Administration</label>
-                            <label class="p-1 rounded hover:bg-gray-100"><input type="checkbox" value="Forest Management Plan"> Forest Management Plan</label>
-                            <label class="p-1 rounded hover:bg-gray-100"><input type="checkbox" value="Reforestation Planning"> Reforestation Planning</label>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-         
-        <div class="mt-4 border-t pt-4">
-             <h4 class="font-bold text-lg">3. Add a Personal Message (Optional)</h4>
-             <textarea id="landowner-message" class="w-full p-2 border rounded mt-2" placeholder="Tell the foresters a bit more about your property and what you're looking for..."></textarea>
-             <button id="send-invites-btn" class="w-full bg-blue-600 text-white p-3 mt-2 rounded-lg font-bold">Send Inquiries</button>
-        </div>
-    </div>
-</div>
+                         <label class="font-semibold text-sm">What is your primary goal?</label>
+                         <div class="flex flex-col text-sm mt-1">
+                             <label class="p-1 rounded hover:bg-gray-100"><input type="radio" name="landowner-goal" value="Maximize Income" checked> Maximize Immediate Income</label>
+                             <label class="p-1 rounded hover:bg-gray-100"><input type="radio" name="landowner-goal" value="Forest Health"> Improve Forest Health & Wildlife</label>
+                             <label class="p-1 rounded hover:bg-gray-100"><input type="radio" name="landowner-goal" value="Long-term Value"> Long-term Investment Value</label>
+                             <label class="p-1 rounded hover:bg-gray-100"><input type="radio" name="landowner-goal" value="Other"> Other / General Advice</label>
+                         </div>
+                     </div>
+                      <div id="forester-service-checkboxes" class="grid grid-cols-1 text-sm mt-1">
+                         <label class="font-semibold text-sm">Which services are you interested in?</label>
+                         <div>
+                             <label class="p-1 rounded hover:bg-gray-100"><input type="checkbox" value="Timber Cruising & Appraisal"> Timber Cruising & Appraisal</label>
+                             <label class="p-1 rounded hover:bg-gray-100"><input type="checkbox" value="Timber Sale Administration"> Timber Sale Administration</label>
+                             <label class="p-1 rounded hover:bg-gray-100"><input type="checkbox" value="Forest Management Plan"> Forest Management Plan</label>
+                             <label class="p-1 rounded hover:bg-gray-100"><input type="checkbox" value="Reforestation Planning"> Reforestation Planning</label>
+                         </div>
+                     </div>
+                 </div>
+             </div>
+         </div>
+           
+         <div class="mt-4 border-t pt-4">
+              <h4 class="font-bold text-lg">3. Add a Personal Message (Optional)</h4>
+              <textarea id="landowner-message" class="w-full p-2 border rounded mt-2" placeholder="Tell the professionals a bit more about your property and what you're looking for..."></textarea>
+              <button id="send-invites-btn" class="w-full bg-blue-600 text-white p-3 mt-2 rounded-lg font-bold">Send Inquiries</button>
+         </div>
+     </div>
+ </div>
 
-<div id="view-inquiry-modal" class="modal-overlay hidden">
-    <div class="modal-content">
-        <span class="close-button close-modal-btn">&times;</span>
-        <h3 class="text-2xl font-bold mb-4">Inquiry Details</h3>
-        <div class="space-y-4 text-sm">
-            <div class="flex justify-between">
-                <span class="text-gray-500">Sent to:</span>
-                <span id="view-inquiry-recipient" class="font-semibold"></span>
-            </div>
-            <div class="flex justify-between">
-                <span class="text-gray-500">Date Sent:</span>
-                <span id="view-inquiry-date" class="font-semibold"></span>
-            </div>
-            <div class="border-t pt-4">
-                <p class="font-semibold mb-1">Primary Goal:</p>
-                <p id="view-inquiry-goal" class="p-2 bg-gray-50 rounded"></p>
-            </div>
-            <div>
-                <p class="font-semibold mb-1">Services Requested:</p>
-                <ul id="view-inquiry-services" class="list-disc list-inside p-2 bg-gray-50 rounded"></ul>
-            </div>
-            <div>
-                <p class="font-semibold mb-1">Message:</p>
-                <p id="view-inquiry-message" class="p-2 bg-gray-50 rounded whitespace-pre-wrap"></p>
-            </div>
-        </div>
-    </div>
-</div>
+ <div id="view-inquiry-modal" class="modal-overlay hidden">
+     <div class="modal-content">
+         <span class="close-button close-modal-btn">&times;</span>
+         <h3 class="text-2xl font-bold mb-4">Inquiry Details</h3>
+         <div class="space-y-4 text-sm">
+             <div class="flex justify-between">
+                 <span class="text-gray-500">Sent to:</span>
+                 <span id="view-inquiry-recipient" class="font-semibold"></span>
+             </div>
+             <div class="flex justify-between">
+                 <span class="text-gray-500">Date Sent:</span>
+                 <span id="view-inquiry-date" class="font-semibold"></span>
+             </div>
+             <div class="border-t pt-4">
+                 <p class="font-semibold mb-1">Primary Goal:</p>
+                 <p id="view-inquiry-goal" class="p-2 bg-gray-50 rounded"></p>
+             </div>
+             <div>
+                 <p class="font-semibold mb-1">Services Requested:</p>
+                 <ul id="view-inquiry-services" class="list-disc list-inside p-2 bg-gray-50 rounded"></ul>
+             </div>
+             <div>
+                 <p class="font-semibold mb-1">Message:</p>
+                 <p id="view-inquiry-message" class="p-2 bg-gray-50 rounded whitespace-pre-wrap"></p>
+             </div>
+         </div>
+     </div>
+ </div>
 
-<div id="save-success-modal" class="modal-overlay hidden"></div>
-<div id="edit-profile-modal" class="full-page-section hidden"></div>
-<div id="decline-modal" class="modal-overlay hidden"></div>
+ <div id="save-success-modal" class="modal-overlay hidden"></div>
+ <div id="decline-modal" class="modal-overlay hidden"></div>
 
-<div id="submit-quote-modal" class="modal-overlay hidden">
-    <div class="modal-content">
-        <span class="close-button close-modal-btn">&times;</span>
-        <h3 id="submit-quote-title" class="text-2xl font-bold mb-4">Submit Quote</h3>
-        <form id="submit-quote-form" class="space-y-4">
-            <input type="hidden" id="quote-inquiry-id">
-            <input type="hidden" id="quote-context-id">
-            <input type="hidden" id="quote-landowner-id">
-            <div>
-                <label for="quote-amount" class="block text-sm font-medium text-gray-700">Quote Amount ($)</label>
-                <input type="number" id="quote-amount" class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm" required placeholder="e.g., 1500">
-            </div>
-            <div>
-                <label for="quote-message" class="block text-sm font-medium text-gray-700">Message to Landowner</label>
-                <textarea id="quote-message" rows="4" class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm" required placeholder="Provide details about your quote, services included, and timeline."></textarea>
-            </div>
-            <div class="pt-2">
-                <button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 px-4 rounded-md">Submit Quote</button>
-            </div>
-        </form>
-    </div>
-</div>
+ <div id="submit-quote-modal" class="modal-overlay hidden">
+     <div class="modal-content">
+         <span class="close-button close-modal-btn">&times;</span>
+         <h3 id="submit-quote-title" class="text-2xl font-bold mb-4">Submit Quote</h3>
+         <form id="submit-quote-form" class="space-y-4">
+             <input type="hidden" id="quote-inquiry-id">
+             <input type="hidden" id="quote-context-id">
+             <input type="hidden" id="quote-landowner-id">
+             <div>
+                 <label for="quote-amount" class="block text-sm font-medium text-gray-700">Quote Amount ($)</label>
+                 <input type="number" id="quote-amount" class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm" required placeholder="e.g., 1500">
+             </div>
+             <div>
+                 <label for="quote-message" class="block text-sm font-medium text-gray-700">Message to Landowner</label>
+                 <textarea id="quote-message" rows="4" class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm" required placeholder="Provide details about your quote, services included, and timeline."></textarea>
+             </div>
+             <div class="pt-2">
+                 <button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 px-4 rounded-md">Submit Quote</button>
+             </div>
+         </form>
+     </div>
+ </div>
 
-<div id="view-quotes-modal" class="modal-overlay hidden">
+ <div id="view-quotes-modal" class="modal-overlay hidden">
+     <div class="modal-content max-w-2xl">
+         <span class="close-button close-modal-btn">&times;</span>
+         <h3 id="view-quotes-title" class="text-2xl font-bold mb-4">Quotes Received</h3>
+         <div id="view-quotes-list" class="space-y-4 max-h-[60vh] overflow-y-auto p-1">
+         </div>
+     </div>
+ </div>
+
+ <div id="info-modal" class="modal-overlay hidden">
+     <div class="modal-content">
+         <span class="close-button close-modal-btn">&times;</span>
+         <h3 id="info-modal-title" class="text-2xl font-bold mb-4"></h3>
+         <p id="info-modal-message" class="text-gray-700"></p>
+         <button class="close-modal-btn mt-4 w-full bg-green-700 text-white p-2 rounded">OK</button>
+     </div>
+ </div>
+
+ <div id="confirmation-modal" class="modal-overlay hidden">
+     <div class="modal-content">
+         <span class="close-button close-modal-btn">&times;</span>
+         <h3 id="confirmation-modal-title" class="text-2xl font-bold mb-4">Are you sure?</h3>
+         <p id="confirmation-modal-message" class="text-gray-700"></p>
+         <div class="mt-6 flex justify-end gap-4">
+             <button id="confirmation-modal-cancel-btn" class="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded">Cancel</button>
+             <button id="confirmation-modal-confirm-btn" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded">Confirm</button>
+         </div>
+     </div>
+ </div>
+
+ <div id="rate-sheet-modal" class="full-page-section hidden"></div>
+
+
+ <template id="inventory-stand-template">
+     <div class="inventory-stand border p-3 my-4 rounded-md bg-white shadow-sm">
+         <div class="flex justify-between items-center mb-3">
+              <div class="flex-grow">
+                 <select class="inventory-stand-name w-full p-2 border rounded font-semibold text-lg"></select>
+             </div>
+              <button type="button" class="remove-inventory-stand-btn text-red-500 font-bold text-2xl ml-4 p-1">&times;</button>
+         </div>
+         <div class="inventory-products-container space-y-3"></div>
+         <button type="button" class="add-inventory-product-btn text-green-600 mt-3 font-semibold">+ Add Product to This Stand</button>
+         <div class="stand-summary-container mt-4 pt-3 border-t">
+             <h4 class="font-semibold text-md mb-1">Stand Totals</h4>
+             <div class="text-xs space-y-1 text-gray-700">
+                 <div class="flex justify-between"><p>Total Volume:</p><p><span class="font-bold stand-total-volume">0.00</span> Tons</p></div>
+                 <div class="flex justify-between"><p>Trees / Acre:</p><p><span class="font-bold stand-trees-per-acre">0.0</span></p></div>
+                 <div class="flex justify-between"><p>Volume / Acre:</p><p><span class="font-bold stand-volume-per-acre">0.00</span> Tons</p></div>
+             </div>
+         </div>
+     </div>
+ </template>
+
+ <template id="inventory-product-template">
+     <div class="inventory-product-group border-t pt-3">
+         <div class="flex justify-between items-center">
+             <select class="inventory-product w-full p-1 border rounded font-medium">
+                 <option value="">Select a Product...</option>
+                 <optgroup label="Pine">
+                     <option value="Pine Sawtimber">Pine Sawtimber</option>
+                     <option value="Pine Chip-n-Saw">Pine Chip-n-Saw</option>
+                     <option value="Pine Pulpwood">Pine Pulpwood</option>
+                     <option value="Pine Topwood">Pine Topwood</option>
+                 </optgroup>
+                 <optgroup label="Hardwood">
+                     <option value="Red Oak Sawtimber">Red Oak Sawtimber</option>
+                     <option value="White Oak Sawtimber">White Oak Sawtimber</option>
+                     <option value="Gum Sawtimber">Gum Sawtimber</option>
+                     <option value="Ash Sawtimber">Ash Sawtimber</option>
+                     <option value="Hickory Sawtimber">Hickory Sawtimber</option>
+                     <option value="Misc. Hardwood Sawtimber">Misc. Hardwood Sawtimber</option>
+                     <option value="Hardwood Pulpwood">Hardwood Pulpwood</option>
+                 </optgroup>
+                  <optgroup label="Other">
+                     <option value="Cypress Sawtimber">Cypress Sawtimber</option>
+                 </optgroup>
+             </select>
+             <button type="button" class="remove-inventory-product-btn text-red-500 font-bold ml-2 p-1 text-xs">Remove</button>
+         </div>
+         <div class="dbh-table-container mt-2">
+             <table class="w-full text-sm">
+                 <thead class="bg-gray-200">
+                     <tr>
+                         <th class="p-1 w-1/4 font-semibold text-left">DBH</th>
+                         <th class="p-1 w-1/4 font-semibold text-center">Trees</th>
+                         <th class="p-1 w-1/4 font-semibold text-center">Volume</th>
+                         <th class="p-1 w-1/4 font-semibold text-center">Units</th>
+                     </tr>
+                 </thead>
+                 <tbody class="dbh-rows-container">
+                     </tbody>
+             </table>
+              <button type="button" class="add-custom-dbh-row-btn text-xs text-blue-600 font-semibold mt-2">+ Add Custom DBH Row</button>
+         </div>
+     </div>
+ </template>
+
+
+ <template id="rate-row-template">
+     <div class="rate-row flex items-center gap-2 mb-2">
+         <select class="rate-product w-1/2 p-1 border rounded">
+             <option value="">Select Product...</option>
+             <option value="Pine Sawtimber">Pine Sawtimber</option>
+             <option value="Pine Chip-n-Saw">Pine Chip-n-Saw</option>
+             <option value="Pine Pulpwood">Pine Pulpwood</option>
+             <option value="Hardwood Sawtimber">Hardwood Sawtimber</option>
+             <option value="Hardwood Pulpwood">Hardwood Pulpwood</option>
+         </select>
+         <input type="number" step="0.01" class="rate-price w-1/2 p-1 border rounded" placeholder="Price per Ton">
+         <button type="button" class="remove-rate-row-btn text-red-500 font-bold">&times;</button>
+     </div>
+ </template>
+
+ <template id="rate-set-template">
+     <div class="rate-set border p-4 rounded-md mb-4 bg-gray-50">
+         <div class="flex justify-between items-center mb-3">
+             <div>
+                 <label class="font-bold">Effective Date:</label>
+                 <input type="date" class="rate-set-effective-date p-1 border rounded">
+             </div>
+             <button type="button" class="remove-rate-set-btn text-red-600 hover:text-red-800 font-semibold">Remove Set</button>
+         </div>
+         <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+             <div>
+                 <h4 class="font-semibold text-center mb-2">Delivered to Mill ($/Ton)</h4>
+                 <div class="mill-rates-container"></div>
+                 <button type="button" class="add-rate-row-btn text-sm text-blue-600" data-category="mill">+ Add Mill Rate</button>
+             </div>
+             <div>
+                 <h4 class="font-semibold text-center mb-2">Stumpage ($/Ton)</h4>
+                 <div class="stumpage-rates-container"></div>
+                 <button type="button" class="add-rate-row-btn text-sm text-blue-600" data-category="stumpage">+ Add Stumpage Rate</button>
+             </div>
+             <div>
+                 <h4 class="font-semibold text-center mb-2">Logging & Hauling ($/Ton)</h4>
+                 <div class="logging-rates-container"></div>
+                 <button type="button" class="add-rate-row-btn text-sm text-blue-600" data-category="logging">+ Add Logging Rate</button>
+             </div>
+         </div>
+     </div>
+ </template>
+
+<div id="project-feed-modal" class="modal-overlay hidden">
     <div class="modal-content max-w-2xl">
         <span class="close-button close-modal-btn">&times;</span>
-        <h3 id="view-quotes-title" class="text-2xl font-bold mb-4">Quotes Received</h3>
-        <div id="view-quotes-list" class="space-y-4 max-h-[60vh] overflow-y-auto p-1">
+        <h3 id="project-feed-title" class="text-2xl font-bold mb-4">Project Feed</h3>
+        
+        <div id="project-feed-entries" class="space-y-4 max-h-[50vh] overflow-y-auto p-4 bg-gray-50 border rounded-md mb-4">
+            <p class="text-gray-500 text-center">Loading project history...</p>
         </div>
+
+        <form id="project-feed-form">
+            <input type="hidden" id="project-feed-project-id">
+            <label for="project-feed-message" class="font-semibold text-gray-700">Add a comment or update:</label>
+            <textarea id="project-feed-message" rows="3" class="w-full p-2 border rounded mt-1" placeholder="Type your message..." required></textarea>
+            <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md mt-2">Post Update</button>
+        </form>
     </div>
 </div>
 
-<div id="rate-sheet-modal" class="full-page-section hidden"></div>
-
-
-<template id="inventory-stand-template">
-    <div class="inventory-stand border p-3 my-4 rounded-md bg-white shadow-sm">
-        <div class="flex justify-between items-center mb-3">
-             <div class="flex-grow mr-4">
-                <select class="inventory-stand-name w-full p-2 border rounded font-semibold text-lg"></select>
-                <div class="text-xs text-gray-500 mt-1">Map-drawn (Gross) Acres: <span class="stand-gross-acres font-medium">0.00</span></div>
+<div id="edit-load-modal" class="modal-overlay hidden">
+    <div class="modal-content max-w-2xl">
+        <span class="close-button close-modal-btn">&times;</span>
+        <h3 class="text-2xl font-bold mb-4">Edit Haul Ticket</h3>
+        <form id="edit-load-form" class="space-y-4">
+            <input type="hidden" id="edit-load-ticket-id">
+            <div>
+                <label for="edit-load-job" class="block text-sm font-medium text-gray-700">Job/Project</label>
+                <select id="edit-load-job" name="job" class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm bg-gray-100" disabled>
+                </select>
             </div>
-            <div class="w-1/4">
-                <label class="block text-xs font-medium text-gray-600">Forester's Net Acres</label>
-                <input type="number" step="0.1" class="stand-net-acres w-full p-2 border rounded" placeholder="e.g. 115.5">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label for="edit-load-date" class="block text-sm font-medium text-gray-700">Date & Time</label>
+                    <input type="datetime-local" id="edit-load-date" name="date" class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm" required>
+                </div>
+                <div>
+                    <label for="edit-load-mill" class="block text-sm font-medium text-gray-700">Destination Mill</label>
+                    <select id="edit-load-mill" name="mill" class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm" required>
+                        <option value="">Select a Mill</option>
+                        <option value="Mill A">Mill A</option>
+                        <option value="Mill B">Mill B</option>
+                        <option value="Mill C">Mill C</option>
+                    </select>
+                </div>
             </div>
-             <button type="button" class="remove-inventory-stand-btn text-red-500 font-bold text-2xl ml-4 p-1">&times;</button>
-        </div>
-        <div class="inventory-products-container space-y-3"></div>
-        <button type="button" class="add-inventory-product-btn text-green-600 mt-3 font-semibold">+ Add Product to This Stand</button>
-        <div class="stand-summary-container mt-4 pt-3 border-t">
-            <h4 class="font-semibold text-md mb-1">Stand Totals</h4>
-            <div class="text-xs space-y-1 text-gray-700">
-                <div class="flex justify-between"><p>Total Volume:</p><p><span class="font-bold stand-total-volume">0.00</span> Tons</p></div>
-                <div class="flex justify-between"><p>Trees / Acre:</p><p><span class="font-bold stand-trees-per-acre">0.0</span></p></div>
-                <div class="flex justify-between"><p>Volume / Acre:</p><p><span class="font-bold stand-volume-per-acre">0.00</span> Tons</p></div>
-            </div>
-        </div>
-    </div>
-</template>
-
-<template id="inventory-product-template">
-    <div class="inventory-product-group border-t pt-3">
-        <div class="flex justify-between items-center">
-            <select class="inventory-product w-full p-1 border rounded font-medium">
-                <option value="">Select a Product...</option>
-                <optgroup label="Pine">
-                    <option value="Pine Sawtimber">Pine Sawtimber</option>
-                    <option value="Pine Chip-n-Saw">Pine Chip-n-Saw</option>
+            <div>
+                <label for="edit-load-product" class="block text-sm font-medium text-gray-700">Product</label>
+                <select id="edit-load-product" name="product" class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm" required>
+                    <option value="">Select a Product</option>
                     <option value="Pine Pulpwood">Pine Pulpwood</option>
-                    <option value="Pine Topwood">Pine Topwood</option>
-                </optgroup>
-                <optgroup label="Hardwood">
-                    <option value="Oak Sawtimber">Oak Sawtimber</option>
-                    <option value="Gum Sawtimber">Gum Sawtimber</option>
-                    <option value="Ash Sawtimber">Ash Sawtimber</option>
-                    <option value="Hickory Sawtimber">Hickory Sawtimber</option>
-                    <option value="Misc. Hardwood Sawtimber">Misc. Hardwood Sawtimber</option>
+                    <option value="Pine Sawtimber">Pine Sawtimber</option>
                     <option value="Hardwood Pulpwood">Hardwood Pulpwood</option>
-                </optgroup>
-                 <optgroup label="Other">
-                    <option value="Cypress Sawtimber">Cypress Sawtimber</option>
-                </optgroup>
-            </select>
-            <button type="button" class="remove-inventory-product-btn text-red-500 font-bold ml-2 p-1 text-xs">Remove</button>
-        </div>
-        <div class="dbh-table-container mt-2">
-            <table class="w-full text-sm">
-                <thead class="bg-gray-200 text-left">
-                    <tr>
-                        <th class="p-1 w-1/4 font-semibold">DBH</th>
-                        <th class="p-1 w-1/4 font-semibold">Trees</th>
-                        <th class="p-1 w-1/4 font-semibold">Volume</th>
-                        <th class="p-1 w-1/4 font-semibold">Units</th>
-                    </tr>
-                </thead>
-                <tbody class="dbh-rows-container">
-                    </tbody>
-            </table>
-             <button type="button" class="add-custom-dbh-row-btn text-xs text-blue-600 font-semibold mt-2">+ Add Custom DBH Row</button>
-        </div>
+                    <option value="Hardwood Sawtimber">Hardwood Sawtimber</option>
+                </select>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+                <div>
+                    <label for="edit-load-gross-weight" class="block text-sm font-medium text-gray-700">Gross Weight (lbs)</label>
+                    <input type="number" id="edit-load-gross-weight" name="grossWeight" placeholder="e.g., 80000" class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm" required>
+                </div>
+                <div>
+                    <label for="edit-load-tare-weight" class="block text-sm font-medium text-gray-700">Tare Weight (lbs)</label>
+                    <input type="number" id="edit-load-tare-weight" name="tareWeight" placeholder="e.g., 35000" class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm" required>
+                </div>
+                <div>
+                    <p class="text-sm font-medium text-gray-700">Net Weight (Tons)</p>
+                    <p id="edit-load-net-weight" class="mt-1 block w-full p-2 bg-gray-100 border border-gray-300 rounded-md font-bold text-lg">0.00</p>
+                </div>
+            </div>
+            <div>
+                <label for="edit-load-ticket-photo" class="block text-sm font-medium text-gray-700">Add/Change Ticket Photo</label>
+                <input type="file" id="edit-load-ticket-photo" name="ticketPhoto" class="mt-1 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-green-100 file:text-green-700 hover:file:bg-green-200" accept="image/*">
+            </div>
+            <div id="edit-load-current-ticket-container" class="text-sm"></div>
+            <div class="pt-4 border-t flex gap-4">
+                <button type="button" class="close-modal-btn w-full bg-gray-500 hover:bg-gray-600 text-white font-bold py-3 px-4 rounded-lg transition duration-200">Cancel</button>
+                <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg transition duration-200">Save Changes</button>
+            </div>
+        </form>
     </div>
-</template>
+</div>

@@ -1,0 +1,24 @@
+{
+  "name": "timbx-project",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "tailwind:init": "tailwindcss init",
+    "tailwind:watch": "./node_modules/.bin/tailwindcss -i ./src/input.css -o ./css/style.css --watch"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/walkerdpt-dot/Timbx-Project.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/walkerdpt-dot/Timbx-Project/issues"
+  },
+  "homepage": "https://github.com/walkerdpt-dot/Timbx-Project#readme",
+  "devDependencies": {
+    "tailwindcss": "^3.4.4"
+  }
+}

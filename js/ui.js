@@ -2,7 +2,7 @@
 import { getMapInstance, initMyPropertiesMap, myPropertiesLayerGroup, initProfileDisplayMap, initPropertyFormMap, initSignupMap, initEditProfileMap, initTimberSaleMap, updateServiceAreaCircle, getDrawnHarvestAreas } from './map.js';
 import { currentUser, allProperties, allProjects, allProfessionalProfiles, allInquiries, globalMarketplaceLayerGroup, db, allTimberSales } from './state.js';
 import { FORESTER_SPECIALTIES, BUYER_PRODUCTS, LOGGING_CONTRACTOR_SERVICES, SERVICE_PROVIDER_SERVICES } from './main.js';
-import { getPropertyById, fetchQuotesForProject, getUserProfileById, getPropertiesForCurrentUser, fetchActiveProjectsForUser, fetchHaulTicketsForUser } from './firestore.js';
+import { getPropertyById, fetchQuotesForProject, getUserProfileById, getPropertiesForCurrentUser, fetchActiveProjectsForUser, fetchHaulTicketsForUser, fetchProjectFeed, getHaulTicketById } from './firestore.js';
 
 // --- Global Maps for Highlighting ---
 const marketplaceFeatureMap = new Map();
@@ -14,7 +14,8 @@ const PRODUCT_DBH_MAP = {
     "Pine Chip-n-Saw": ['8"', '10"', '12"'],
     "Pine Pulpwood": ['6"', '8"', '10"'],
     "Pine Topwood": ['4"', '6"'],
-    "Oak Sawtimber": ['14"', '16"', '18"', '20"', '22"', '24"'],
+    "Red Oak Sawtimber": ['14"', '16"', '18"', '20"', '22"', '24"'],
+    "White Oak Sawtimber": ['14"', '16"', '18"', '20"', '22"', '24"'],
     "Gum Sawtimber": ['14"', '16"', '18"', '20"', '22"', '24"'],
     "Ash Sawtimber": ['14"', '16"', '18"', '20"', '22"', '24"'],
     "Hickory Sawtimber": ['14"', '16"', '18"', '20"', '22"', '24"'],
@@ -36,29 +37,41 @@ function createHighlightFunctions(mapInstance, highlightStyle, listHighlightClas
                 listItem.classList.add(listHighlightClass);
             }
 
-            if (layer && layer.setStyle) {
-                if (layer.feature?.geometry?.type === 'Point' || layer instanceof L.CircleMarker) {
-                    layer.setRadius(12);
-                    layer.setStyle({ fillColor: '#facc15', color: '#facc15' });
+            if (layer && typeof layer.setStyle === 'function') {
+                if (layer instanceof L.FeatureGroup) {
+                    layer.eachLayer(subLayer => subLayer.setStyle(highlightStyle));
                 } else {
-                    layer.setStyle(highlightStyle);
+                    if (layer.feature?.geometry?.type === 'Point' || layer instanceof L.CircleMarker) {
+                        layer.setRadius(12);
+                        layer.setStyle({ fillColor: '#facc15', color: '#facc15' });
+                    } else {
+                        layer.setStyle(highlightStyle);
+                    }
                 }
             }
         },
         unhighlight: function(featureId) {
             if (!mapInstance.has(featureId)) return;
-            const { layer, listItemId, originalStyle } = mapInstance.get(featureId);
+            const { layer, listItemId } = mapInstance.get(featureId);
 
             const listItem = document.getElementById(listItemId);
             if (listItem) {
                 listItem.classList.remove(listHighlightClass);
             }
 
-            if (layer && layer.setStyle && originalStyle) {
-                if(layer.feature?.geometry?.type === 'Point' || layer instanceof L.CircleMarker) {
-                    layer.setRadius(originalStyle.radius);
+            if (layer) {
+                if (layer instanceof L.FeatureGroup) {
+                    layer.eachLayer(subLayer => {
+                        if (subLayer.options.originalStyle) {
+                           subLayer.setStyle(subLayer.options.originalStyle);
+                        }
+                    });
+                } else if (typeof layer.setStyle === 'function' && layer.options.originalStyle) {
+                    if(layer.feature?.geometry?.type === 'Point' || layer instanceof L.CircleMarker) {
+                        layer.setRadius(layer.options.originalStyle.radius);
+                    }
+                    layer.setStyle(layer.options.originalStyle);
                 }
-                layer.setStyle(originalStyle);
             }
         }
     };
@@ -111,9 +124,16 @@ function setFormEditable(formElement, isEditable) {
     formElement.querySelectorAll('#add-inventory-stand-btn, .add-inventory-product-btn, .add-custom-dbh-row-btn, .remove-inventory-stand-btn, .remove-inventory-product-btn').forEach(btn => {
         btn.style.display = isEditable ? 'inline-block' : 'none';
     });
-    if (!isEditable) {
-        document.getElementById('btn-accept-cruise-report').disabled = false;
-        document.getElementById('btn-start-timber-sale').disabled = false;
+
+    const landownerActions = document.getElementById('landowner-review-actions');
+    const printButton = document.getElementById('btn-print-report');
+
+    if (isEditable) {
+        landownerActions.style.display = 'none';
+        printButton.style.display = 'none';
+    } else {
+        landownerActions.style.display = 'flex';
+        printButton.style.display = 'block';
     }
 }
 
@@ -195,6 +215,57 @@ function displayFilteredLoads(tickets) {
 export function openModal(modalId) { document.getElementById(modalId)?.classList.remove('hidden'); }
 export function closeModal(modalId) { document.getElementById(modalId)?.classList.add('hidden'); }
 
+export function showInfoModal(title, message) {
+    document.getElementById('info-modal-title').textContent = title;
+    document.getElementById('info-modal-message').textContent = message;
+    openModal('info-modal');
+}
+
+export function showConfirmationModal(title, message) {
+    return new Promise((resolve) => {
+        const modal = document.getElementById('confirmation-modal');
+        if (!modal) {
+            console.error('Confirmation modal not found in DOM');
+            resolve(false);
+            return;
+        }
+
+        const titleEl = document.getElementById('confirmation-modal-title');
+        const messageEl = document.getElementById('confirmation-modal-message');
+        const confirmBtn = document.getElementById('confirmation-modal-confirm-btn');
+        const cancelBtn = document.getElementById('confirmation-modal-cancel-btn');
+        const closeBtn = modal.querySelector('.close-modal-btn');
+
+        titleEl.textContent = title;
+        messageEl.textContent = message;
+
+        const newConfirmBtn = confirmBtn.cloneNode(true);
+        confirmBtn.parentNode.replaceChild(newConfirmBtn, confirmBtn);
+
+        const newCancelBtn = cancelBtn.cloneNode(true);
+        cancelBtn.parentNode.replaceChild(newCancelBtn, cancelBtn);
+
+        const newCloseBtn = closeBtn.cloneNode(true);
+        closeBtn.parentNode.replaceChild(newCloseBtn, closeBtn);
+
+        const confirmHandler = () => {
+            closeModal('confirmation-modal');
+            resolve(true);
+        };
+
+        const cancelHandler = () => {
+            closeModal('confirmation-modal');
+            resolve(false);
+        };
+
+        newConfirmBtn.addEventListener('click', confirmHandler);
+        newCancelBtn.addEventListener('click', cancelHandler);
+        newCloseBtn.addEventListener('click', cancelHandler);
+
+        openModal('confirmation-modal');
+    });
+}
+
 export function updateLoginUI() {
     const userDisplay = document.getElementById('user-display');
     const isLoggedIn = !!currentUser;
@@ -214,7 +285,10 @@ export function updateLoginUI() {
         userDisplay.appendChild(nameSpan);
     }
     const professionalRoles = ['forester', 'timber-buyer', 'logging-contractor', 'service-provider'];
+    
     const tabVisibility = {
+        '#home': !isLoggedIn,
+        '#dashboard': isLoggedIn,
         '#properties': role === 'landowner',
         '#my-projects': isLoggedIn,
         '#my-inquiries': professionalRoles.includes(role),
@@ -275,15 +349,16 @@ export function updateMapAndList() {
                 marker.addTo(globalMarketplaceLayerGroup);
                 const featureId = `sale-${sale.id}`;
                 const listItemId = `list-item-${featureId}`;
+                marker.options.originalStyle = originalStyle;
                 marketplaceFeatureMap.set(featureId, { layer: marker, listItemId: listItemId, originalStyle: originalStyle });
                 marker.on('mouseover', () => window.highlightMarketplaceFeature(featureId));
                 marker.on('mouseout', () => window.unhighlightMarketplaceFeature(featureId));
                 listItemsHTML += `
                     <li id="${listItemId}" onmouseover="window.highlightMarketplaceFeature('${featureId}')" onmouseout="window.unhighlightMarketplaceFeature('${featureId}')" 
-                        class="p-2 cursor-pointer transition-colors" style="border-left: 4px solid ${originalStyle.fillColor};"
-                        onclick="window.location.href='details.html?type=sale&id=${sale.id}'">
-                        <p class="font-bold text-gray-800">${sale.saleName}</p>
-                        <p class="text-xs text-gray-600 pl-1">${sale.acreage?.toFixed(1) || 'N/A'} acres in ${sale.county || 'N/A'}</p>
+                        onclick="window.location.href = 'details.html?type=sale&id=${sale.id}'"
+                        class="px-2 py-1.5 cursor-pointer transition-colors" style="border-left: 4px solid ${originalStyle.fillColor};">
+                        <p class="font-semibold text-gray-800 text-sm leading-tight">${sale.saleName}</p>
+                        <p class="text-xs text-gray-500 leading-tight">${sale.acreage?.toFixed(1) || 'N/A'} acres in ${sale.county || 'N/A'}</p>
                     </li>`;
             }
         });
@@ -317,20 +392,16 @@ export function updateMapAndList() {
             marker.addTo(globalMarketplaceLayerGroup);
             const featureId = `profile-${prof.id}`;
             const listItemId = `list-item-${featureId}`;
+            marker.options.originalStyle = originalStyle;
             marketplaceFeatureMap.set(featureId, { layer: marker, listItemId: listItemId, originalStyle: originalStyle });
             marker.on('mouseover', () => window.highlightMarketplaceFeature(featureId));
             marker.on('mouseout', () => window.unhighlightMarketplaceFeature(featureId));
-            let primaryService = '';
-            if (role === 'forester' && prof.specialties?.length > 0) primaryService = prof.specialties[0];
-            if ((role === 'logging-contractor' || role === 'service-provider') && prof.services?.length > 0) primaryService = prof.services[0];
-            if (role === 'timber-buyer' && prof.products?.length > 0) primaryService = `Buying: ${prof.products[0]}`;
             listItemsHTML += `
                 <li id="${listItemId}" onmouseover="window.highlightMarketplaceFeature('${featureId}')" onmouseout="window.unhighlightMarketplaceFeature('${featureId}')" 
-                    class="p-2 cursor-pointer transition-colors" style="border-left: 4px solid ${originalStyle.fillColor};"
-                    onclick="window.location.href='details.html?type=profile&id=${prof.id}'">
-                    <p class="font-bold text-gray-800">${prof.username}</p>
-                    <p class="text-xs text-gray-600 pl-1">${formattedRole} | ${prof.company || 'Independent'}</p>
-                    ${primaryService ? `<p class="text-xs text-gray-500 italic pl-1">${primaryService}</p>` : ''}
+                    onclick="window.location.href = 'details.html?type=profile&id=${prof.id}'"
+                    class="px-2 py-1.5 cursor-pointer transition-colors" style="border-left: 4px solid ${originalStyle.fillColor};">
+                    <p class="font-semibold text-gray-800 text-sm leading-tight">${prof.username}</p>
+                    <p class="text-xs text-gray-500 leading-tight">${formattedRole} | ${prof.company || 'Independent'}</p>
                 </li>`;
         }
     });
@@ -348,7 +419,7 @@ export async function renderPropertiesForCurrentUser() {
     if (!getMapInstance('my-properties-map')) initMyPropertiesMap();
     const listContainer = document.getElementById('my-properties-list-container');
     listContainer.innerHTML = '<div class="p-4 text-center text-gray-500">Loading properties...</div>';
-    renderMyPropertiesList(allProperties);
+    renderMyPropertiesList(allProperties.filter(p => p.ownerId === currentUser.uid));
 }
 
 function renderMyPropertiesList(properties) {
@@ -372,50 +443,54 @@ function renderMyPropertiesList(properties) {
         let statusHTML = '';
         if (project) {
             let projectStatusText = project.status.replace(/_/g, ' ');
-            statusHTML = `<div class="text-xs text-blue-600 font-semibold mt-1">Active Project: 
-                            <a href="#my-projects?projectId=${project.id}" class="underline hover:text-blue-800 capitalize">${projectStatusText}</a>
-                          </div>`;
+            statusHTML = `<div class="text-xs text-blue-700 font-semibold">Project: 
+                <a href="#my-projects?projectId=${project.id}" class="underline hover:text-blue-800 capitalize">${projectStatusText}</a>
+            </div>`;
         } else {
-            statusHTML = `<div class="text-xs text-gray-500 mt-1">Status: <span class="font-medium text-gray-700">Ready for new project</span></div>`;
+            statusHTML = `<div class="text-xs text-gray-500">Status: <span class="font-medium text-gray-700">Idle</span></div>`;
         }
         listHTML += `
             <li id="${listItemId}" onmouseover="window.highlightMyProperty('${featureId}')" onmouseout="window.unhighlightMyProperty('${featureId}')" 
-                class="p-2 transition-colors bg-white border" style="border-left: 5px solid #059669;">
-                <div class="flex justify-between items-start">
-                    <div>
-                        <a href="details.html?type=property&id=${prop.id}&from=properties" class="font-bold text-gray-800 hover:underline">${prop.name}</a>
-                        <p class="text-xs text-gray-600">${prop.acreage?.toFixed(1) || '0'} acres | ${prop.county || 'N/A'}</p>
+                class="p-2 transition-colors bg-white border rounded-md" style="border-left: 5px solid #059669;">
+                <div class="flex justify-between items-center">
+                    <div class="flex-grow">
+                        <a href="details.html?type=property&id=${prop.id}&from=properties" class="font-bold text-gray-800 hover:underline leading-tight">${prop.name}</a>
+                        <p class="text-xs text-gray-600 leading-tight">${prop.acreage?.toFixed(1) || '0'} acres | ${prop.county || 'N/A'}</p>
+                        ${statusHTML}
                     </div>
-                    <div class="relative more-options-container flex-shrink-0">
-                        <button class="more-options-btn p-1 rounded-full hover:bg-gray-200">
-                            <svg class="w-5 h-5 text-gray-600" fill="currentColor" viewBox="0 0 20 20"><path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z"></path></svg>
-                        </button>
-                        <div class="more-options-dropdown hidden absolute right-0 mt-2 w-48 bg-white rounded-md shadow-xl z-10 border">
-                             <button class="edit-property-btn block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100" data-property-id="${prop.id}">Edit Property</button>
-                             <button class="delete-property-btn block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-100" data-property-id="${prop.id}">Delete Property</button>
+                    <div class="flex items-center flex-shrink-0 space-x-2">
+                        <button class="seek-services-btn bg-teal-500 hover:bg-teal-600 text-white text-xs px-2 py-1 rounded-md font-semibold" data-property-id="${prop.id}" data-property-name="${prop.name}">+ Seek Services</button>
+                        <div class="relative more-options-container">
+                            <button class="more-options-btn p-1 rounded-full hover:bg-gray-200">
+                                <svg class="w-5 h-5 text-gray-600" fill="currentColor" viewBox="0 0 20 20"><path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z"></path></svg>
+                            </button>
+                            <div class="more-options-dropdown hidden absolute right-0 mt-2 w-48 bg-white rounded-md shadow-xl z-10 border">
+                                <button class="edit-property-btn block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100" data-property-id="${prop.id}">Edit Property</button>
+                                <button class="delete-property-btn block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-100" data-property-id="${prop.id}">Delete Property</button>
+                            </div>
                         </div>
-                    </div>
-                </div>
-                <div class="mt-2 pt-2 border-t">
-                    ${statusHTML}
-                    <div class="mt-2">
-                        <button class="seek-services-btn bg-teal-500 hover:bg-teal-600 text-white text-xs px-2 py-1.5 rounded-md font-semibold" data-property-id="${prop.id}" data-property-name="${prop.name}">+ Seek New Service</button>
                     </div>
                 </div>
             </li>`;
         const cleanGeoJSON = sanitizeGeoJSON(prop.geoJSON);
         if (cleanGeoJSON?.geometry?.coordinates) {
-            const originalStyle = { color: '#059669', weight: 2, fillColor: '#10B981', fillOpacity: 0.3 };
-            const polygonLayer = L.geoJSON(cleanGeoJSON, { style: originalStyle });
+            const polygonStyle = { color: '#059669', weight: 2, fillColor: '#10B981', fillOpacity: 0.3 };
+            const polygonLayer = L.geoJSON(cleanGeoJSON, { style: polygonStyle });
+            polygonLayer.options.originalStyle = polygonStyle;
+
             const bounds = polygonLayer.getBounds();
             if (bounds.isValid()) {
-                const centerMarker = L.circleMarker(bounds.getCenter(), { radius: 6, fillColor: '#2563EB', color: '#FFFFFF', weight: 1.5, opacity: 1, fillOpacity: 0.9, interactive: false });
+                const markerStyle = { radius: 6, fillColor: '#2563EB', color: '#FFFFFF', weight: 1.5, opacity: 1, fillOpacity: 0.9, interactive: false };
+                const centerMarker = L.circleMarker(bounds.getCenter(), markerStyle);
+                centerMarker.options.originalStyle = markerStyle;
+
                 const featureGroup = L.featureGroup([polygonLayer, centerMarker])
                     .bindTooltip(prop.name)
                     .on('click', () => window.location.href = `details.html?type=property&id=${prop.id}&from=properties`)
                     .on('mouseover', () => window.highlightMyProperty(featureId))
                     .on('mouseout', () => window.unhighlightMyProperty(featureId));
-                myPropertiesFeatureMap.set(featureId, { layer: featureGroup, listItemId: listItemId, originalStyle: originalStyle });
+                
+                myPropertiesFeatureMap.set(featureId, { layer: featureGroup, listItemId: listItemId, originalStyle: polygonStyle });
                 featureGroup.addTo(myPropertiesLayerGroup);
                 allBounds.push(bounds);
             }
@@ -449,7 +524,7 @@ export async function renderMyProjects() {
     for (const status of statusOrder) {
         const projects = groupedProjects[status];
         if (projects.length === 0) continue;
-        allContent += `<div class="mb-6"><h3 class="text-xl font-semibold text-gray-700 border-b pb-2 mb-3">${statusHeadings[status]}</h3><div class="space-y-3">`;
+        allContent += `<div class="mb-4"><h3 class="text-xl font-semibold text-gray-700 border-b pb-2 mb-2">${statusHeadings[status]}</h3><div class="space-y-2">`;
         for (const project of projects) {
             allContent += await renderProjectCard(project);
         }
@@ -474,9 +549,12 @@ async function renderProjectCard(project) {
     const isForester = project.foresterId === currentUser.uid;
     const statusText = project.status.replace(/_/g, ' ');
     const property = allProperties.find(p => p.id === project.propertyId);
-    const createdDate = project.createdAt?.toDate ? project.createdAt.toDate().toLocaleDateString() : 'N/A';
     const serviceSought = project.servicesSought?.[0] || 'General Inquiry';
     let participantHTML = '';
+    let projectFeedButtonHTML = '';
+    if (project.status !== 'inquiry') {
+        projectFeedButtonHTML = `<button class="view-project-feed-btn text-xs bg-gray-200 hover:bg-gray-300 font-semibold py-1 px-2 rounded-md" data-project-id="${project.id}">View Feed</button>`;
+    }
     if (isOwner) {
         let participant;
         let participantRole = '';
@@ -488,18 +566,10 @@ async function renderProjectCard(project) {
             participantRole = 'Timber Buyer';
         }
         if (participant) {
-            participantHTML = `
-                <div class="flex justify-between text-sm mt-1">
-                    <span class="text-gray-500">${participantRole}:</span>
-                    <a href="details.html?type=profile&id=${participant.id}&from=my-projects" class="font-semibold text-blue-600 hover:underline">${participant.username}</a>
-                </div>`;
+            participantHTML = `<div class="flex justify-between text-xs"><span class="text-gray-500">${participantRole}:</span><a href="details.html?type=profile&id=${participant.id}&from=my-projects" class="font-semibold text-blue-600 hover:underline">${participant.username}</a></div>`;
         }
     } else {
-        participantHTML = `
-            <div class="flex justify-between text-sm mt-1">
-                <span class="text-gray-500">Client:</span>
-                <span class="font-semibold text-gray-800">${project.ownerName}</span>
-            </div>`;
+        participantHTML = `<div class="flex justify-between text-xs"><span class="text-gray-500">Client:</span><span class="font-semibold text-gray-800">${project.ownerName}</span></div>`;
     }
     if (isOwner) {
         if (project.status === 'inquiry') {
@@ -507,49 +577,33 @@ async function renderProjectCard(project) {
         } else if (project.status === 'cruise_in_progress') {
             projectContent = `<div class="mt-2 p-2 bg-blue-50 border border-blue-200 rounded-md text-sm"><p class="text-blue-800">Awaiting cruise data submission from forester.</p></div>`;
         } else if (project.status === 'pending_approval') {
-            projectContent = `<div class="mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded-md text-sm">
-                                <p class="text-yellow-800 font-semibold mb-2">The forester has submitted the cruise data. Please review and approve.</p>
-                                <div class="flex justify-end">
-                                    <button class="approve-cruise-btn bg-green-600 hover:bg-green-700 text-white font-bold py-1 px-3 rounded-md text-sm" data-project-id="${project.id}">Review Cruise Data</button>
-                                </div>
-                            </div>`;
+            projectContent = `<div class="mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded-md text-sm"><p class="text-yellow-800 font-semibold mb-2">The forester has submitted the cruise data. Please review and approve.</p><div class="flex justify-end"><button class="approve-cruise-btn bg-green-600 hover:bg-green-700 text-white font-bold py-1 px-3 rounded-md text-sm" data-project-id="${project.id}">Review Cruise Data</button></div></div>`;
         }
     } else if (isForester) {
         if (project.status === 'cruise_in_progress') {
-            projectContent = `<div class="mt-2 flex justify-end"><button class="submit-cruise-btn bg-blue-600 hover:bg-blue-700 text-white font-bold py-1 px-3 rounded-md text-sm" data-project-id="${project.id}">Submit Cruise Data</button></div>`;
+            projectContent = `<div class="mt-2 flex justify-end gap-2"><button class="decline-project-btn bg-red-600 hover:bg-red-700 text-white font-bold py-1 px-3 rounded-md text-sm" data-project-id="${project.id}">Decline Project</button><button class="submit-cruise-btn bg-blue-600 hover:bg-blue-700 text-white font-bold py-1 px-3 rounded-md text-sm" data-project-id="${project.id}">Submit Cruise Data</button></div>`;
         } else if (project.status === 'pending_approval') {
-            projectContent = `<div class="mt-2 p-2 bg-gray-100 border rounded-md text-sm">
-                                <p class="text-gray-700">Awaiting landowner review of submitted cruise data.</p>
-                                <div class="mt-2 flex justify-end">
-                                    <button class="retract-cruise-btn bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-1 px-3 rounded-md text-sm" data-project-id="${project.id}">Retract & Edit</button>
-                                </div>
-                            </div>`;
+            projectContent = `<div class="mt-2 p-2 bg-gray-100 border rounded-md text-sm"><p class="text-gray-700">Awaiting landowner review.</p><div class="mt-2 flex justify-end"><button class="retract-cruise-btn bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-1 px-3 rounded-md text-sm" data-project-id="${project.id}">Retract & Edit</button></div></div>`;
         }
     }
-    const propertyInfoHTML = property
-        ? `<p class="text-sm text-gray-500">${property.acreage?.toFixed(1) || 'N/A'} ac | ${property.county || 'N/A'}</p>`
-        : `<p class="text-sm text-red-500">Property data not available.</p>`;
+    const propertyInfoHTML = property ? `${property.acreage?.toFixed(1) || 'N/A'} ac | ${property.county || 'N/A'}` : `Property data not available.`;
     return `
         <div class="project-card bg-white p-2 rounded-lg shadow-sm border" id="project-${project.id}">
             <div class="flex justify-between items-start">
-                <div>
-                    <h4 class="text-base font-bold text-green-800 leading-tight">
+                <div class="flex-grow mr-2">
+                    <h4 class="font-bold text-green-800 leading-tight">
                         <a href="details.html?type=property&id=${project.propertyId}&from=my-projects" class="hover:underline">${project.propertyName}</a>
                     </h4>
-                    ${propertyInfoHTML}
+                    <p class="text-xs text-gray-500">${propertyInfoHTML}</p>
                 </div>
-                <span class="font-semibold capitalize text-indigo-700 bg-indigo-100 py-0.5 px-2.5 rounded-full text-sm">${statusText}</span>
+                <div class="flex flex-col items-end gap-2">
+                    <span class="flex-shrink-0 font-semibold capitalize text-indigo-700 bg-indigo-100 py-0.5 px-2 rounded-full text-xs">${statusText}</span>
+                    ${projectFeedButtonHTML}
+                </div>
             </div>
-            <div class="mt-1 pt-2 border-t text-sm">
-                <div class="flex justify-between text-sm">
-                    <span class="text-gray-500">Service:</span>
-                    <span class="text-gray-800 font-semibold truncate">${serviceSought}</span>
-                </div>
+            <div class="mt-1 pt-1 border-t text-sm">
+                <div class="flex justify-between text-xs"><span class="text-gray-500 mr-2">Service:</span><span class="font-semibold text-right truncate">${serviceSought}</span></div>
                 ${participantHTML}
-                <div class="flex justify-between text-sm mt-1">
-                    <span class="text-gray-500">Created:</span>
-                    <span class="text-gray-700">${createdDate}</span>
-                </div>
             </div>
             ${projectContent}
         </div>
@@ -573,15 +627,14 @@ async function renderLandownerInquiryContent(project) {
         if (inquiry.status === 'quoted') statusColor = 'bg-blue-100 text-blue-800';
         if (inquiry.status === 'declined') statusColor = 'bg-red-100 text-red-800';
         return `
-            <div class="grid grid-cols-3 items-center p-2 border-t text-sm first:border-t-0">
+            <div class="grid grid-cols-3 items-center px-2 py-1 border-t text-sm first:border-t-0">
                 <div>
-                   <p>To: <a href="details.html?type=profile&id=${inquiry.toUserId}&from=my-projects" class="font-semibold text-blue-600 hover:underline">${professional?.username || '...'}</a></p>
-                   <p class="text-xs text-gray-500">Sent: ${inquiryDate}</p>
+                   <p class="text-xs">To: <a href="details.html?type=profile&id=${inquiry.toUserId}&from=my-projects" class="font-semibold text-blue-600 hover:underline">${professional?.username || '...'}</a></p>
                 </div>
                 <div class="text-center">
-                    <span class="text-xs font-medium py-1 px-2 rounded-full capitalize ${statusColor}">${inquiry.status}</span>
+                    <span class="text-xs font-medium py-0.5 px-2 rounded-full capitalize ${statusColor}">${inquiry.status}</span>
                 </div>
-                <div class="flex items-center justify-end gap-2">
+                <div class="flex items-center justify-end gap-1">
                     ${actionButtons}
                 </div>
             </div>
@@ -589,15 +642,15 @@ async function renderLandownerInquiryContent(project) {
     }).join('');
     const quoteCount = myReceivedQuotes.length;
     return `
-        <div class="border-t pt-2 mt-2">
-            <h4 class="font-semibold text-gray-800 text-sm">Inquiries Sent</h4>
-            <div class="mt-1 border rounded-md bg-gray-50 divide-y divide-gray-200">
-                ${inquiriesHTML || '<p class="text-sm text-center p-2 text-gray-500">No inquiries found.</p>'}
+        <div class="pt-1 mt-1 border-t">
+            <div class="flex justify-between items-center mt-1">
+            	<h4 class="font-semibold text-gray-800 text-sm">Inquiries Sent</h4>
+            	<button class="view-quotes-btn bg-green-600 hover:bg-green-700 text-white font-bold py-1 px-3 rounded-md text-xs ${quoteCount === 0 ? 'opacity-50 cursor-not-allowed' : ''}" data-project-id="${project.id}" ${quoteCount === 0 ? 'disabled' : ''}>
+            	    View Quotes (${quoteCount})
+            	</button>
             </div>
-            <div class="mt-3 flex justify-end">
-                <button class="view-quotes-btn bg-green-600 hover:bg-green-700 text-white font-bold py-1 px-3 rounded-md text-sm ${quoteCount === 0 ? 'opacity-50 cursor-not-allowed' : ''}" data-project-id="${project.id}" ${quoteCount === 0 ? 'disabled' : ''}>
-                    View Quotes (${quoteCount})
-                </button>
+            <div class="mt-1 border rounded-md bg-gray-50 divide-y divide-gray-200">
+                ${inquiriesHTML || '<p class="text-xs text-center p-2 text-gray-500">No inquiries sent for this project.</p>'}
             </div>
         </div>
     `;
@@ -633,7 +686,7 @@ export async function renderInquiriesForCurrentUser() {
                     <button class="decline-inquiry-btn bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-md text-sm" data-inquiry-id="${inquiry.id}">Decline</button>
                 `;
             } else if (inquiry.status !== 'archived') {
-                 actionButtonsHTML = `
+                actionButtonsHTML = `
                     <button class="archive-inquiry-btn bg-blue-500 hover:bg-blue-600 text-white font-bold py-1 px-2 rounded-md text-xs" data-inquiry-id="${inquiry.id}">Archive</button>
                 `;
             }
@@ -815,76 +868,116 @@ export function openServiceSelectModal(propertyId, propertyName) {
     modal.dataset.propertyId = propertyId;
     document.getElementById('service-modal-property-name').textContent = propertyName;
 
-    modal.querySelectorAll('.service-category-btn').forEach(button => {
+    const serviceButtons = modal.querySelectorAll('.service-category-btn');
+    serviceButtons.forEach(button => {
         button.disabled = false;
         button.classList.remove('opacity-50', 'cursor-not-allowed', 'bg-gray-100');
     });
 
-    const activeProject = allProjects.find(p => 
+    const activeProjects = allProjects.filter(p => 
         p.propertyId === propertyId && 
-        p.status !== 'completed' && 
-        p.status !== 'cancelled'
+        !['completed', 'cancelled', 'withdrawn'].includes(p.status)
     );
-    
-    if (activeProject) {
-        const forestryButton = modal.querySelector('button[data-service-category="Forestry"]');
-        if (forestryButton) {
-            forestryButton.disabled = true;
-            forestryButton.classList.add('opacity-50', 'cursor-not-allowed', 'bg-gray-100');
-        }
+
+    if (activeProjects.length > 0) {
+        const serviceToCategoryMap = {
+            'Timber Cruising & Appraisal': 'forester',
+            'Timber Sale Administration': 'forester',
+            'Forest Management Plan': 'forester',
+            'Reforestation Planning': 'forester'
+        };
+        
+        const activeCategories = new Set();
+        activeProjects.forEach(project => {
+            (project.servicesSought || []).forEach(service => {
+                const category = serviceToCategoryMap[service];
+                if (category) {
+                    activeCategories.add(category);
+                }
+            });
+        });
+
+        activeCategories.forEach(category => {
+            const button = modal.querySelector(`button[data-service-category="${category}"]`);
+            if (button) {
+                button.disabled = true;
+                button.classList.add('opacity-50', 'cursor-not-allowed', 'bg-gray-100');
+            }
+        });
     }
     
     openModal('service-select-modal');
 }
 
 
-export async function openInviteForesterModal(propertyId) {
+export async function openInviteProfessionalModal(propertyId, role) {
     const modal = document.getElementById('invite-forester-modal');
     if (!modal) {
         alert('Error: Invite modal HTML not found.');
         return;
     }
+
+    const roleInfo = {
+        'forester': { title: 'Foresters', placeholder: 'Independent Forester', roleFilter: 'forester' },
+        'timber-buyer': { title: 'Timber Buyers', placeholder: 'Timber Buyer', roleFilter: 'timber-buyer' },
+        'logging-contractor': { title: 'Logging Contractors', placeholder: 'Logging Contractor', roleFilter: 'logging-contractor' },
+        'service-provider': { title: 'Service Providers', placeholder: 'Service Provider', roleFilter: 'service-provider' }
+    };
+    const currentRole = roleInfo[role];
+
     const property = allProperties.find(p => p.id === propertyId);
     if (!property) {
         alert("Could not load property details.");
         return;
     }
     modal.dataset.propertyId = propertyId;
+    document.getElementById('invite-modal-title').textContent = `Invite ${currentRole.title}`;
     document.getElementById('invite-modal-property-name').textContent = property.name;
     const listContainer = document.getElementById('forester-invite-list');
-    listContainer.innerHTML = `<p>Finding nearby foresters...</p>`;
+    listContainer.innerHTML = `<p>Finding nearby ${currentRole.title.toLowerCase()}...</p>`;
+    
+    const foresterServices = document.getElementById('forester-service-checkboxes');
+    if (role === 'forester') {
+        foresterServices.style.display = 'block';
+    } else {
+        foresterServices.style.display = 'none';
+    }
+
     openModal('invite-forester-modal');
+
     const geoJSON = sanitizeGeoJSON(property.geoJSON);
     if (!geoJSON) {
         listContainer.innerHTML = `<p class="text-center text-red-500">Property has an invalid boundary.</p>`;
         return;
     }
     const propertyCenter = L.geoJSON(geoJSON).getBounds().getCenter();
-    const nearbyForesters = allProfessionalProfiles.filter(p => {
-        if (p.role?.toLowerCase() !== 'forester' || !p.location || typeof p.location.lat !== 'number' || typeof p.location.lng !== 'number' || typeof p.serviceRadius !== 'number') {
+    const nearbyProfessionals = allProfessionalProfiles.filter(p => {
+        if (p.role?.toLowerCase() !== currentRole.roleFilter || !p.location || typeof p.location.lat !== 'number' || typeof p.location.lng !== 'number' || typeof p.serviceRadius !== 'number') {
             return false;
         }
-        const foresterLatLng = L.latLng(p.location.lat, p.location.lng);
-        const distanceInMeters = propertyCenter.distanceTo(foresterLatLng);
+        const profLatLng = L.latLng(p.location.lat, p.location.lng);
+        const distanceInMeters = propertyCenter.distanceTo(profLatLng);
         const distanceInMiles = distanceInMeters / 1609.34;
         return distanceInMiles <= p.serviceRadius;
     });
-    if (nearbyForesters.length > 0) {
-        listContainer.innerHTML = nearbyForesters.map(f => `
+
+    if (nearbyProfessionals.length > 0) {
+        listContainer.innerHTML = nearbyProfessionals.map(p => `
             <div class="flex items-center justify-between p-2 border rounded-md hover:bg-gray-50">
                 <div class="flex items-center">
-                    <img src="${f.profilePictureUrl || 'https://placehold.co/128x128/8f8f8f/ffffff?text=No+Image'}" alt="${f.username}" class="w-12 h-12 rounded-full mr-3">
+                    <img src="${p.profilePictureUrl || 'https://placehold.co/128x128/8f8f8f/ffffff?text=No+Image'}" alt="${p.username}" class="w-12 h-12 rounded-full mr-3">
                     <div>
-                        <p class="font-bold text-gray-800">${f.username}</p>
-                        <p class="text-xs text-gray-500">${f.company || 'Independent Forester'}</p>
+                        <p class="font-bold text-gray-800">${p.username}</p>
+                        <p class="text-xs text-gray-500">${p.company || currentRole.placeholder}</p>
                     </div>
                 </div>
-                <input type="checkbox" data-forester-id="${f.id}" class="h-5 w-5" checked>
+                <input type="checkbox" data-professional-id="${p.id}" class="h-5 w-5" checked>
             </div>`).join('');
     } else {
-        listContainer.innerHTML = `<p class="text-center text-gray-500">No foresters found serving this area. Ensure forester profiles have a valid 'location' (with lat/lng) and a 'serviceRadius' number.</p>`;
+        listContainer.innerHTML = `<p class="text-center text-gray-500">No ${currentRole.title.toLowerCase()} found serving this area.</p>`;
     }
 }
+
 
 export function openDeclineModal(inquiryId) {
     const inquiry = allInquiries.find(i => i.id === inquiryId);
@@ -940,14 +1033,18 @@ export async function populateCruiseFormPage(projectId) {
     document.getElementById('timber-sale-property-id').value = projectId;
     const cruiseData = project.cruiseData;
     const isLandownerReview = currentUser.role === 'landowner' && project.status === 'pending_approval';
+    
     const title = document.getElementById('timber-sale-form-title');
     const submitBtn = document.getElementById('btn-submit-sale-form');
-    const acceptCruiseBtn = document.getElementById('btn-accept-cruise-report');
-    const startSaleBtn = document.getElementById('btn-start-timber-sale');
+    const landownerActions = document.getElementById('landowner-review-actions');
+    const printBtn = document.getElementById('btn-print-report');
+    
     title.textContent = isLandownerReview ? `Review Cruise for: ${property.name}` : `Enter Cruise Data for: ${property.name}`;
     submitBtn.style.display = isLandownerReview ? 'none' : 'block';
-    acceptCruiseBtn.style.display = isLandownerReview ? 'block' : 'none';
-    startSaleBtn.style.display = isLandownerReview ? 'block' : 'none';
+    landownerActions.style.display = isLandownerReview ? 'flex' : 'none';
+    printBtn.style.display = isLandownerReview ? 'block' : 'none';
+    printBtn.onclick = () => window.open(`report.html?projectId=${projectId}`, '_blank');
+    
     const d = cruiseData?.details || {};
     document.getElementById('sale-name').value = d.saleName || property.name || '';
     document.getElementById('sale-county').value = d.county || property.county || '';
@@ -969,51 +1066,83 @@ export async function populateCruiseFormPage(projectId) {
     document.getElementById('sale-guarantee-tally').checked = d.guaranteeTally || false;
     document.getElementById('sale-more-conditions').value = d.moreConditions || '';
     
-    const map = initTimberSaleMap(sanitizeGeoJSON(property.geoJSON), cruiseData?.annotations, isLandownerReview);
+    const isReadOnly = currentUser.role === 'landowner';
+    const map = initTimberSaleMap(sanitizeGeoJSON(property.geoJSON), cruiseData?.annotations, isReadOnly);
     
     setTimeout(() => {
-        setupInventoryTableManager(cruiseData?.inventory, isLandownerReview);
+        setupInventoryTableManager(cruiseData?.inventory, isReadOnly, property);
         setFormEditable(form, !isLandownerReview);
         map?.invalidateSize();
-    }, 100);
+        updateMapLegend();
+    }, 250);
 }
 
 
-function setupInventoryTableManager(inventory = [], isReadOnly = false) {
+function setupInventoryTableManager(inventory = [], isReadOnly = false, property) {
     const container = document.getElementById('timber-inventory-stands-container');
     container.innerHTML = ''; 
-    if (inventory && inventory.length > 0) {
-        inventory.forEach(stand => addInventoryStand(stand, isReadOnly));
+    
+    const entireTractCheckbox = document.getElementById('cruise-entire-tract-checkbox');
+    const addStandBtn = document.getElementById('add-inventory-stand-btn');
+    
+    const handleToggle = () => {
+        if (entireTractCheckbox.checked) {
+            addStandBtn.style.display = 'none';
+            container.innerHTML = '';
+            const standData = (inventory && inventory.length === 1 && inventory[0].name === "Entire Tract") ? inventory[0] : { name: "Entire Tract" };
+            addInventoryStand(standData, isReadOnly, property.acreage);
+            const firstStand = container.querySelector('.inventory-stand');
+            if (firstStand) {
+                firstStand.querySelector('.remove-inventory-stand-btn').style.display = 'none';
+                firstStand.querySelector('.inventory-stand-name').disabled = true;
+            }
+        } else {
+            addStandBtn.style.display = isReadOnly ? 'none' : 'inline-block';
+            container.innerHTML = '';
+            if (inventory && inventory.length > 0 && inventory[0].name !== "Entire Tract") {
+                inventory.forEach(stand => addInventoryStand(stand, isReadOnly));
+            } else {
+                addInventoryStand(null, isReadOnly);
+            }
+        }
+        calculateAndDisplayInventoryTotals(property);
+    };
+    
+    entireTractCheckbox.removeEventListener('change', handleToggle);
+    entireTractCheckbox.addEventListener('change', handleToggle);
+    
+    if (inventory && inventory.length === 1 && inventory[0].name === "Entire Tract") {
+        entireTractCheckbox.checked = true;
     } else {
-        addInventoryStand(null, isReadOnly);
+        entireTractCheckbox.checked = false;
     }
     
-    document.getElementById('add-inventory-stand-btn').onclick = () => addInventoryStand(null, isReadOnly);
-    
+    handleToggle();
+
     container.addEventListener('click', e => {
         const standContainer = e.target.closest('.inventory-stand');
         if (e.target.closest('.remove-inventory-stand-btn')) {
            e.target.closest('.inventory-stand').remove();
            updateAllStandDropdowns();
         } else if (e.target.closest('.add-inventory-product-btn')) {
-           addInventoryProduct(standContainer.querySelector('.inventory-products-container'));
-           updateProductDropdowns(standContainer);
+            addInventoryProduct(standContainer.querySelector('.inventory-products-container'));
+            updateProductDropdowns(standContainer);
         } else if (e.target.closest('.remove-inventory-product-btn')) {
-           const standContainer = e.target.closest('.inventory-stand');
-           e.target.closest('.inventory-product-group').remove();
-           updateProductDropdowns(standContainer);
+            const standContainer = e.target.closest('.inventory-stand');
+            e.target.closest('.inventory-product-group').remove();
+            updateProductDropdowns(standContainer);
         } else if (e.target.closest('.add-custom-dbh-row-btn')) {
-           const productContainer = e.target.closest('.inventory-product-group');
-           addDbhRow(productContainer.querySelector('.dbh-rows-container'), '', null, true);
+            const productContainer = e.target.closest('.inventory-product-group');
+            addDbhRow(productContainer.querySelector('.dbh-rows-container'), '', null, true);
         }
-        calculateAndDisplayInventoryTotals();
+        calculateAndDisplayInventoryTotals(property);
     });
 
     container.addEventListener('change', e => {
         const target = e.target;
         if (target.classList.contains('inventory-stand-name')) {
             updateAllStandDropdowns();
-            calculateAndDisplayInventoryTotals(); 
+            calculateAndDisplayInventoryTotals(property); 
         }
         if (target.classList.contains('inventory-product')) {
             const standContainer = target.closest('.inventory-stand');
@@ -1030,16 +1159,13 @@ function setupInventoryTableManager(inventory = [], isReadOnly = false) {
     });
     
     container.addEventListener('input', e => {
-        if (e.target.classList.contains('dbh-volume') || e.target.classList.contains('dbh-trees') || e.target.classList.contains('stand-net-acres')) {
-            calculateAndDisplayInventoryTotals();
+        if (e.target.classList.contains('dbh-volume') || e.target.classList.contains('dbh-trees')) {
+            calculateAndDisplayInventoryTotals(property);
         }
     });
-
-    calculateAndDisplayInventoryTotals();
-    updateAllStandDropdowns();
 }
 
-function addInventoryStand(standData = null, isReadOnly = false) {
+function addInventoryStand(standData = null, isReadOnly = false, entireTractAcreage = null) {
     const container = document.getElementById('timber-inventory-stands-container');
     const template = document.getElementById('inventory-stand-template');
     const clone = template.content.cloneNode(true);
@@ -1048,9 +1174,14 @@ function addInventoryStand(standData = null, isReadOnly = false) {
     const standNameSelect = standElement.querySelector('.inventory-stand-name');
     
     if (standData) {
-        // A short timeout allows the dropdown to be populated by the event listener before we set its value
         setTimeout(() => {
-            standNameSelect.value = standData.name || '';
+            if (standData.name === "Entire Tract" && entireTractAcreage) {
+                standNameSelect.innerHTML = `<option value="Entire Tract">Entire Tract (${entireTractAcreage.toFixed(2)} ac)</option>`;
+                standNameSelect.value = "Entire Tract";
+                standNameSelect.dataset.acreage = entireTractAcreage;
+            } else {
+                standNameSelect.value = standData.name || '';
+            }
             const changeEvent = new Event('change', { bubbles: true });
             standNameSelect.dispatchEvent(changeEvent);
         }, 0);
@@ -1060,7 +1191,6 @@ function addInventoryStand(standData = null, isReadOnly = false) {
         } else {
              addInventoryProduct(productsContainer);
         }
-        standElement.querySelector('.stand-net-acres').value = standData.netAcres || '';
     } else {
         addInventoryProduct(productsContainer);
     }
@@ -1078,22 +1208,20 @@ function addInventoryProduct(container, productData = null) {
     const selectedProduct = productData?.product || "";
     productGroup.querySelector('.inventory-product').value = selectedProduct;
     
-    const dbhClasses = PRODUCT_DBH_MAP[selectedProduct] || [];
-    dbhClasses.forEach(dbh => {
-        let dbhValues = null;
-        if (productData && productData.breakdown) {
-            dbhValues = productData.breakdown.find(b => b.dbh === dbh);
-        }
-        addDbhRow(dbhRowsContainer, dbh, dbhValues);
+    const defaultDbhClasses = PRODUCT_DBH_MAP[selectedProduct] || [];
+    const savedBreakdown = productData?.breakdown || [];
+    const processedDbhs = new Set();
+
+    savedBreakdown.forEach(b => {
+        addDbhRow(dbhRowsContainer, b.dbh, b, !defaultDbhClasses.includes(b.dbh));
+        processedDbhs.add(b.dbh);
     });
 
-    if (productData && productData.breakdown) {
-        productData.breakdown.forEach(b => {
-            if (!dbhClasses.includes(b.dbh) && b.dbh) { 
-                addDbhRow(dbhRowsContainer, b.dbh, b, true);
-            }
-        });
-    }
+    defaultDbhClasses.forEach(dbh => {
+        if (!processedDbhs.has(dbh)) {
+            addDbhRow(dbhRowsContainer, dbh, null);
+        }
+    });
 
     container.appendChild(clone);
 }
@@ -1108,8 +1236,8 @@ function addDbhRow(container, dbh, dbhData = null, isCustom = false) {
 
     row.innerHTML = `
         <td class="p-1">${dbhInputHTML}</td>
-        <td class="p-1"><input type="number" class="dbh-trees w-full p-1 border rounded" placeholder="0" value="${dbhData?.trees || ''}"></td>
-        <td class="p-1"><input type="number" step="0.01" class="dbh-volume w-full p-1 border rounded" placeholder="0.00" value="${dbhData?.volume || ''}"></td>
+        <td class="p-1"><input type="number" class="dbh-trees w-full p-1 border rounded text-right" placeholder="0" value="${dbhData?.trees || ''}"></td>
+        <td class="p-1"><input type="number" step="0.01" class="dbh-volume w-full p-1 border rounded text-right" placeholder="0.00" value="${dbhData?.volume || ''}"></td>
         <td class="p-1">
             <select class="dbh-unit w-full p-1 border rounded">
                 <option ${ (dbhData?.units === 'Tons' || !dbhData) ? 'selected' : ''}>Tons</option>
@@ -1127,6 +1255,8 @@ export function updateInventoryStandDropdowns() {
     const allDropdowns = document.querySelectorAll('.inventory-stand-name');
 
     allDropdowns.forEach(select => {
+        if (select.value === "Entire Tract") return;
+
         const currentVal = select.value;
         select.innerHTML = '<option value="">Select Harvest Area...</option>';
         availableStands.forEach(area => {
@@ -1158,16 +1288,6 @@ function updateAllStandDropdowns() {
                 option.disabled = false;
             }
         }
-        const standEl = select.closest('.inventory-stand');
-        if(standEl) {
-            const selectedOption = select.selectedOptions[0];
-            const grossAcresSpan = standEl.querySelector('.stand-gross-acres');
-            if (selectedOption && selectedOption.value) {
-                grossAcresSpan.textContent = parseFloat(selectedOption.dataset.acreage).toFixed(2);
-            } else {
-                grossAcresSpan.textContent = '0.00';
-            }
-        }
     });
 }
 
@@ -1185,14 +1305,14 @@ function updateProductDropdowns(standElement) {
             if (option.value && option.value !== currentSelection) {
                 option.disabled = selectedProducts.has(option.value);
             } else {
-                 option.disabled = false;
+                option.disabled = false;
             }
         });
     });
 }
 
 
-function calculateAndDisplayInventoryTotals() {
+function calculateAndDisplayInventoryTotals(property) {
     const grandTotals = {
         "Pine Sawtimber": { tons: 0 },
         "Pine Chip-n-Saw": { tons: 0 },
@@ -1202,7 +1322,8 @@ function calculateAndDisplayInventoryTotals() {
     };
     
     const productMapping = {
-        "Oak Sawtimber": "Hardwood Sawtimber",
+        "Red Oak Sawtimber": "Hardwood Sawtimber",
+        "White Oak Sawtimber": "Hardwood Sawtimber",
         "Gum Sawtimber": "Hardwood Sawtimber",
         "Ash Sawtimber": "Hardwood Sawtimber",
         "Hickory Sawtimber": "Hardwood Sawtimber",
@@ -1211,28 +1332,18 @@ function calculateAndDisplayInventoryTotals() {
         "Pine Topwood": "Pine Pulpwood",
     };
 
-    let totalGrossAcres = 0;
-    let totalNetAcres = 0;
-
     document.querySelectorAll('.inventory-stand').forEach(standEl => {
         const standTotals = { totalTrees: 0, totalVolume: 0 };
-        const netAcresInput = standEl.querySelector('.stand-net-acres');
-        const grossAcres = parseFloat(standEl.querySelector('.stand-gross-acres').textContent) || 0;
-        let netAcres = parseFloat(netAcresInput.value);
+        const standNameSelect = standEl.querySelector('.inventory-stand-name');
+        const selectedOption = standNameSelect.selectedOptions[0];
+        let standAcres = 0;
         
-        if (isNaN(netAcres) || netAcres <= 0) {
-            netAcres = grossAcres > 0 ? grossAcres : 0;
-        }
-
-        if (standEl.querySelector('.inventory-stand-name').value) {
-             totalGrossAcres += grossAcres;
-             totalNetAcres += parseFloat(netAcresInput.value) || grossAcres; 
+        if (document.getElementById('cruise-entire-tract-checkbox').checked && property) {
+            standAcres = property.acreage || 0;
+        } else if (selectedOption && selectedOption.dataset.acreage) {
+            standAcres = parseFloat(selectedOption.dataset.acreage);
         }
         
-        if (grossAcres > 0 && !netAcresInput.value) {
-            netAcresInput.placeholder = `e.g. ${grossAcres.toFixed(1)}`;
-        }
-
         standEl.querySelectorAll('.inventory-product-group').forEach(productGroup => {
             const selectedProduct = productGroup.querySelector('.inventory-product').value;
             let summaryCategory = productMapping[selectedProduct] || selectedProduct;
@@ -1251,15 +1362,12 @@ function calculateAndDisplayInventoryTotals() {
             }
         });
 
-        const treesPerAcre = netAcres > 0 ? (standTotals.totalTrees / netAcres).toFixed(1) : '0.0';
-        const volumePerAcre = netAcres > 0 ? (standTotals.totalVolume / netAcres).toFixed(2) : '0.00';
+        const treesPerAcre = standAcres > 0 ? (standTotals.totalTrees / standAcres).toFixed(1) : '0.0';
+        const volumePerAcre = standAcres > 0 ? (standTotals.totalVolume / standAcres).toFixed(2) : '0.00';
         standEl.querySelector('.stand-total-volume').textContent = standTotals.totalVolume.toFixed(2);
         standEl.querySelector('.stand-trees-per-acre').textContent = treesPerAcre;
         standEl.querySelector('.stand-volume-per-acre').textContent = volumePerAcre;
     });
-
-    document.getElementById('total-gross-acres').textContent = totalGrossAcres.toFixed(2);
-    document.getElementById('total-net-acres').textContent = totalNetAcres.toFixed(2);
 
     let grandTotalVolume = 0;
     document.getElementById('total-pine-sawtimber').textContent = grandTotals["Pine Sawtimber"].tons.toFixed(2);
@@ -1273,50 +1381,6 @@ function calculateAndDisplayInventoryTotals() {
     }
     document.getElementById('total-all-products').textContent = grandTotalVolume.toFixed(2);
 }
-
-export function updateMapLegend() {
-    const legendContainer = document.getElementById('map-legend');
-    if (!legendContainer) return;
-
-    const allFeatures = getDrawnHarvestAreas(); 
-    if (allFeatures.length === 0) {
-        legendContainer.innerHTML = '<p class="text-gray-500 text-center">No areas, roads, or points drawn on the map.</p>';
-        return;
-    }
-
-    let legendHTML = '<h4 class="font-semibold mb-2">Map Legend</h4><div class="space-y-1">';
-    allFeatures.forEach(area => {
-        let symbolHTML = '';
-        const color = area.color || '#000000';
-        const fillColor = area.fillColor || area.color;
-
-        if (area.type === 'Property Boundary') {
-             symbolHTML = `<span class="inline-block w-4 h-4 mr-2 border-2 border-dashed" style="border-color: ${color}; background-color: ${fillColor}20;"></span>`;
-        }
-        else if (area.type === 'Harvest Area' || area.type === 'SMZ') {
-            symbolHTML = `<span class="inline-block w-4 h-4 mr-2 border" style="background-color: ${color}; border-color: ${color};"></span>`;
-        } else if (area.type === 'Road') {
-            symbolHTML = `<span class="inline-block w-4 h-1 mr-2 -translate-y-1 border-t-2 border-b-2" style="border-color: ${color};"></span>`;
-        } else if (area.type === 'Point of Interest') {
-            // MODIFIED: Use a simple circle for the legend marker
-            symbolHTML = `<span class="inline-block w-4 h-4 mr-2 rounded-full border border-black" style="background-color: ${color};"></span>`;
-        }
-        
-        const acreageText = (area.acreage > 0) 
-            ? `: ${area.acreage.toFixed(2)} acres`
-            : '';
-            
-        legendHTML += `
-            <div class="flex items-center text-xs">
-                ${symbolHTML}
-                <span><strong>${area.label}</strong> (${area.type})${acreageText}</span>
-            </div>
-        `;
-    });
-    legendHTML += '</div>';
-    legendContainer.innerHTML = legendHTML;
-}
-
 
 export function openForesterQuoteModal(inquiryId) {
     const inquiry = allInquiries.find(i => i.id === inquiryId);
@@ -1459,7 +1523,7 @@ function addRateSet(setData = null) {
         rateSetElement.querySelector('.rate-set-effective-date').value = setData.effectiveDate || '';
         const categories = ['mill', 'stumpage', 'logging'];
         categories.forEach(category => {
-            const rowsContainer = setElement.querySelector(`.add-rate-row-btn[data-category="${category}"]`).previousElementSibling;
+            const rowsContainer = rateSetElement.querySelector(`.${category}-rates-container`);
             (setData[category] || []).forEach(rate => addRateRow(rowsContainer, rate, category));
         });
     } else {
@@ -1490,4 +1554,225 @@ export function setupServiceFilter(checkboxId, dropdownId, services) {
             updateMapAndList();
         }
     });
+}
+
+// --- NEW/UPDATED DASHBOARD & PROJECT FEED FUNCTIONS ---
+
+export async function renderDashboard() {
+    if (!currentUser) return;
+
+    const container = document.getElementById('dashboard');
+    container.innerHTML = `
+        <div class="p-6 bg-white rounded-lg shadow-md">
+            <h2 class="text-3xl font-bold text-gray-800 mb-2">Welcome back, ${currentUser.username}!</h2>
+            <p class="text-lg text-gray-600 mb-6">Here's your command center.</p>
+        </div>`;
+
+    if (currentUser.role === 'landowner') {
+        renderLandownerDashboard(container);
+    } else {
+        renderProfessionalDashboard(container);
+    }
+}
+
+function renderLandownerDashboard(container) {
+    const propertiesCount = allProperties.filter(p => p.ownerId === currentUser.uid).length;
+    const activeProjects = allProjects.filter(p => p.ownerId === currentUser.uid && p.status !== 'completed' && p.status !== 'cancelled');
+    const actionRequiredProjects = activeProjects.filter(p => p.status === 'inquiry' || p.status === 'pending_approval');
+    
+    let actionItemsHTML = actionRequiredProjects.map(p => {
+        if (p.status === 'pending_approval') {
+            return `<a href="#add-edit-cruise?projectId=${p.id}" class="block p-3 rounded-md bg-yellow-100 hover:bg-yellow-200 border border-yellow-300">
+                        <p class="font-bold text-yellow-800">Review Cruise Data</p>
+                        <p class="text-sm text-yellow-700">The cruise report for "${p.propertyName}" is ready for your approval.</p>
+                    </a>`;
+        }
+        if (p.status === 'inquiry') {
+            return `<a href="#my-projects?projectId=${p.id}" class="block p-3 rounded-md bg-blue-100 hover:bg-blue-200 border border-blue-300">
+                        <p class="font-bold text-blue-800">View New Quotes</p>
+                        <p class="text-sm text-blue-700">You may have received new quotes for your project on "${p.propertyName}".</p>
+                    </a>`;
+        }
+        return '';
+    }).join('');
+
+    if (actionItemsHTML === '') {
+        actionItemsHTML = '<p class="text-center text-gray-500 p-4">No actions currently required. All projects are up to date!</p>';
+    }
+
+    container.innerHTML = `
+        <div class="p-4 md:p-6">
+            <h2 class="text-3xl font-bold text-gray-800 mb-2">Welcome back, ${currentUser.username}!</h2>
+            
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mt-6">
+                <a href="#properties" class="bg-white p-6 rounded-lg shadow-md hover:shadow-xl transition-shadow border-l-4 border-green-600">
+                    <h3 class="text-xl font-semibold text-gray-700">My Properties</h3>
+                    <p class="text-5xl font-bold text-green-600 mt-2">${propertiesCount}</p>
+                </a>
+                <a href="#my-projects" class="bg-white p-6 rounded-lg shadow-md hover:shadow-xl transition-shadow border-l-4 border-blue-600">
+                    <h3 class="text-xl font-semibold text-gray-700">Active Projects</h3>
+                    <p class="text-5xl font-bold text-blue-600 mt-2">${activeProjects.length}</p>
+                </a>
+                <div class="bg-white p-6 rounded-lg shadow-md border-l-4 border-gray-600">
+                    <h3 class="text-xl font-semibold text-gray-700 mb-4">Quick Actions</h3>
+                    <div class="space-y-3">
+                        <a href="#add-edit-property" class="block w-full text-center bg-green-700 hover:bg-green-600 text-white font-bold py-3 px-4 rounded-lg transition-colors">+ Add New Property</a>
+                        <a href="#marketplace" class="block w-full text-center bg-gray-700 hover:bg-gray-600 text-white font-bold py-3 px-4 rounded-lg transition-colors">Find a Professional</a>
+                    </div>
+                </div>
+            </div>
+
+            <div class="mt-8 pt-6 border-t">
+                <h3 class="text-2xl font-semibold text-gray-800 mb-4">Action Items</h3>
+                <div class="space-y-4">
+                    ${actionItemsHTML}
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+function renderProfessionalDashboard(container) {
+    const newInquiries = allInquiries.filter(i => i.status === 'pending' && i.toUserId === currentUser.uid);
+    const activeProjects = allProjects.filter(p => p.status !== 'completed' && p.status !== 'cancelled' && (p.foresterId === currentUser.uid || p.supplierId === currentUser.uid));
+    
+    container.innerHTML = `
+        <div class="p-4 md:p-6">
+            <h2 class="text-3xl font-bold text-gray-800 mb-2">Welcome back, ${currentUser.username}!</h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mt-6">
+                <a href="#my-inquiries" class="bg-white p-6 rounded-lg shadow-md hover:shadow-xl transition-shadow border-l-4 border-amber-500">
+                    <h3 class="text-xl font-semibold text-gray-700">New Inquiries</h3>
+                    <p class="text-5xl font-bold text-amber-500 mt-2">${newInquiries.length}</p>
+                </a>
+                <a href="#my-projects" class="bg-white p-6 rounded-lg shadow-md hover:shadow-xl transition-shadow border-l-4 border-blue-600">
+                    <h3 class="text-xl font-semibold text-gray-700">Active Projects</h3>
+                    <p class="text-5xl font-bold text-blue-600 mt-2">${activeProjects.length}</p>
+                </a>
+                <a href="#my-profile" class="bg-white p-6 rounded-lg shadow-md hover:shadow-xl transition-shadow border-l-4 border-gray-500">
+                    <h3 class="text-xl font-semibold text-gray-700">My Stats</h3>
+                    <div class="mt-4 space-y-2">
+                        <p class="text-gray-600"><span class="font-bold text-lg text-gray-800">${currentUser.rating?.toFixed(1) || 'N/A'}</span> / 5.0 Rating</p>
+                        <p class="text-gray-600"><span class="font-bold text-lg text-gray-800">${currentUser.completedTransactions || 0}</span> Completed Transactions</p>
+                    </div>
+                </a>
+            </div>
+        </div>
+    `;
+}
+
+export async function openProjectFeedModal(projectId) {
+    const project = allProjects.find(p => p.id === projectId);
+    if (!project) {
+        alert("Could not find project details.");
+        return;
+    }
+
+    document.getElementById('project-feed-title').textContent = `Project Feed: ${project.propertyName}`;
+    document.getElementById('project-feed-project-id').value = projectId;
+    document.getElementById('project-feed-form').reset();
+    
+    openModal('project-feed-modal');
+    await renderProjectFeedEntries(projectId);
+}
+
+export async function renderProjectFeedEntries(projectId) {
+    const entriesContainer = document.getElementById('project-feed-entries');
+    entriesContainer.innerHTML = '<p class="text-gray-500 text-center">Loading project history...</p>';
+
+    const feedEntries = await fetchProjectFeed(db, projectId);
+
+    if (feedEntries.length === 0) {
+        entriesContainer.innerHTML = '<p class="text-gray-500 text-center">No entries yet. Be the first to post an update!</p>';
+        return;
+    }
+
+    entriesContainer.innerHTML = feedEntries.map(entry => {
+        const entryDate = entry.createdAt?.toDate() ? entry.createdAt.toDate().toLocaleString() : 'Just now';
+        const isCurrentUser = entry.userId === currentUser.uid;
+        const defaultAvatar = 'https://placehold.co/128x128/8f8f8f/ffffff?text=No+Image';
+        const avatarUrl = entry.profilePictureUrl || defaultAvatar;
+
+        return `
+            <div class="flex items-start gap-3 ${isCurrentUser ? 'flex-row-reverse' : ''}">
+                <img src="${avatarUrl}" alt="${entry.username}" class="w-10 h-10 rounded-full object-cover">
+                <div class="flex-1">
+                    <div class="p-3 rounded-lg ${isCurrentUser ? 'bg-blue-100' : 'bg-gray-200'}">
+                        <p class="text-sm text-gray-800">${entry.message}</p>
+                    </div>
+                    <p class="text-xs text-gray-500 mt-1 ${isCurrentUser ? 'text-right' : ''}">
+                        <strong>${isCurrentUser ? 'You' : entry.username}</strong> on ${entryDate}
+                    </p>
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    entriesContainer.scrollTop = entriesContainer.scrollHeight;
+}
+
+export function updateMapLegend() {
+    const legendContainer = document.getElementById('map-legend');
+    if (!legendContainer) return;
+
+    const features = getDrawnHarvestAreas();
+    let legendHTML = `<h4 class="font-semibold mb-1">Map Legend</h4>`;
+
+    if (features.length === 0) {
+        legendHTML += `<p class="text-xs text-gray-500">No features drawn yet.</p>`;
+        legendContainer.innerHTML = legendHTML;
+        return;
+    }
+    
+    legendHTML += `<div class="space-y-1">`;
+    features.forEach(feature => {
+        const acreageText = (feature.acreage > 0) ? `: ${feature.acreage.toFixed(2)} acres` : '';
+        legendHTML += `
+            <div class="flex items-center text-xs">
+                <span class="inline-block w-4 h-4 mr-2 border" style="background-color: ${feature.fillColor}; border-color: ${feature.color};"></span>
+                <span><strong>${feature.label}</strong> (${feature.type})${acreageText}</span>
+            </div>
+        `;
+    });
+    legendHTML += '</div>';
+    legendContainer.innerHTML = legendHTML;
+}
+
+export async function openEditLoadModal(ticketId) {
+    const ticket = await getHaulTicketById(db, ticketId);
+    if (!ticket) {
+        alert("Could not find the haul ticket to edit.");
+        return;
+    }
+
+    document.getElementById('edit-load-ticket-id').value = ticketId;
+    
+    const jobSelect = document.getElementById('edit-load-job');
+    const project = allProjects.find(p => p.id === ticket.jobId);
+    jobSelect.innerHTML = `<option value="${ticket.jobId}">${project?.propertyName || 'Unknown Job'}</option>`;
+
+    document.getElementById('edit-load-date').value = ticket.dateTime;
+    document.getElementById('edit-load-mill').value = ticket.mill;
+    document.getElementById('edit-load-product').value = ticket.product;
+    document.getElementById('edit-load-gross-weight').value = ticket.grossWeight;
+    document.getElementById('edit-load-tare-weight').value = ticket.tareWeight;
+    calculateEditNetWeight();
+
+    const currentTicketContainer = document.getElementById('edit-load-current-ticket-container');
+    if (ticket.ticketImageUrl) {
+        currentTicketContainer.innerHTML = `
+            <p class="font-semibold">Current Ticket:</p>
+            <a href="${ticket.ticketImageUrl}" target="_blank" class="text-blue-600 hover:underline">View Current Image</a>
+        `;
+    } else {
+        currentTicketContainer.innerHTML = '<p class="text-gray-500">No ticket image was uploaded for this load.</p>';
+    }
+    
+    openModal('edit-load-modal');
+}
+
+export function calculateEditNetWeight() {
+    const gross = parseFloat(document.getElementById('edit-load-gross-weight').value) || 0;
+    const tare = parseFloat(document.getElementById('edit-load-tare-weight').value) || 0;
+    const netTons = gross > tare ? ((gross - tare) / 2000).toFixed(2) : '0.00';
+    document.getElementById('edit-load-net-weight').textContent = netTons;
 }

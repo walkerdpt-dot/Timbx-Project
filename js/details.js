@@ -3,6 +3,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebas
 import { getFirestore, doc, getDoc } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
 import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
 import { firebaseConfig } from './config.js';
+import { initDetailViewMap, initProfileDisplayMap } from './map.js';
 
 // --- Initialize Firebase on this page ---
 const app = initializeApp(firebaseConfig);
@@ -21,17 +22,17 @@ document.addEventListener('DOMContentLoaded', () => {
     if (backButton) {
         if (from === 'properties') {
             backButton.href = 'index.html#properties';
-            backButton.textContent = '← Back to My Properties';
+            backButton.textContent = '\u2190 Back to My Properties';
         } else if (from === 'my-projects') {
             backButton.href = 'index.html#my-projects';
-            backButton.textContent = '← Back to My Projects';
+            backButton.textContent = '\u2190 Back to My Projects';
         } else if (from === 'my-inquiries') {
             backButton.href = 'index.html#my-inquiries';
-            backButton.textContent = '← Back to My Inquiries';
+            backButton.textContent = '\u2190 Back to My Inquiries';
         }
         else {
             backButton.href = 'index.html#marketplace';
-            backButton.textContent = '← Back to Marketplace';
+            backButton.textContent = '\u2190 Back to Marketplace';
         }
     }
 
@@ -45,7 +46,9 @@ document.addEventListener('DOMContentLoaded', () => {
             try {
                 if (itemType === 'property') {
                     const property = await getPropertyById(db, itemId);
-                    renderPropertyDetails(property, contentDiv);
+                    // NEW: Fetch the owner's profile as well
+                    const owner = property ? await getUserProfileById(db, property.ownerId) : null;
+                    renderPropertyDetails(property, owner, contentDiv);
                 } else if (itemType === 'profile') {
                     const profile = await getUserProfileById(db, itemId);
                     renderProfileDetails(profile, contentDiv);
@@ -88,95 +91,16 @@ async function getTimberSaleById(db, saleId) {
 }
 
 
-// --- Map Functions for Details Page ---
-function sanitizeGeoJSON(geoJSON) {
-    if (!geoJSON) return null;
-    let parsedGeoJSON = geoJSON;
-    while (typeof parsedGeoJSON === 'string') {
-        try {
-            parsedGeoJSON = JSON.parse(parsedGeoJSON);
-        } catch (e) {
-            console.error("Failed to parse GeoJSON string:", geoJSON);
-            return null;
-        }
-    }
-    return parsedGeoJSON;
-}
-
-function initDetailMap(containerId, geoJSON, annotations) {
-    const mapContainer = document.getElementById(containerId);
-    if (!mapContainer) return;
-     
-    const map = L.map(containerId);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
-
-    const cleanGeoJSON = sanitizeGeoJSON(geoJSON);
-    let bounds;
-    if (cleanGeoJSON) {
-        const layer = L.geoJSON(cleanGeoJSON, {
-            style: { color: '#22c55e', weight: 3, fillOpacity: 0.1, dashArray: '5, 5' }
-        }).addTo(map);
-        bounds = layer.getBounds();
-    }
-    
-    const cleanAnnotations = sanitizeGeoJSON(annotations);
-    if (cleanAnnotations) {
-        const annotationLayer = L.geoJSON(cleanAnnotations, {
-            onEachFeature: (feature, layer) => {
-                if (feature.properties?.label) {
-                    layer.bindTooltip(feature.properties.label, { permanent: true, direction: 'center', className: 'map-label' });
-                }
-                if (feature.properties?.color && typeof layer.setStyle === 'function') {
-                    layer.setStyle({ color: feature.properties.color });
-                }
-            }
-        }).addTo(map);
-
-        if (!bounds || !bounds.isValid()) {
-            bounds = annotationLayer.getBounds();
-        } else {
-            bounds.extend(annotationLayer.getBounds());
-        }
-    }
-
-    if (bounds && bounds.isValid()) {
-        map.fitBounds(bounds, { padding: [20, 20] });
-    }
-    setTimeout(() => map.invalidateSize(), 0);
-}
-
-
-function initProfileDisplayMap(containerId, userProfile) {
-    if (!userProfile?.location) return;
-
-    const map = L.map(containerId, { 
-        dragging: false, scrollWheelZoom: false, doubleClickZoom: false, zoomControl: false
-    });
-
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
-
-    const latLng = [userProfile.location.lat, userProfile.location.lng];
-    map.setView(latLng, 8);
-    L.marker(latLng).addTo(map);
-    if (userProfile.serviceRadius) {
-        L.circle(latLng, { 
-            radius: userProfile.serviceRadius * 1609.34,
-            color: '#007bff', 
-            fillOpacity: 0.1 
-        }).addTo(map);
-    }
-    setTimeout(() => map.invalidateSize(), 0);
-}
-
 // --- Rendering Functions ---
-function renderPropertyDetails(prop, container) {
+function renderPropertyDetails(prop, owner, container) {
     if (!prop) {
         container.innerHTML = '<p class="text-red-500">Property not found or you do not have permission to view it.</p>';
         return;
     }
      
     container.innerHTML = `
-        <h2 class="text-3xl font-bold text-green-800 mb-4">${prop.name}</h2>
+        <h2 class="text-3xl font-bold text-green-800 mb-2">${prop.name}</h2>
+        <p class="text-lg text-gray-600 mb-4">Owned by: <span class="font-semibold">${owner ? owner.username : 'N/A'}</span></p>
         <div id="property-detail-map" style="height: 400px;" class="w-full rounded-lg border mb-6"></div>
          
         <div class="space-y-6">
@@ -216,7 +140,16 @@ function renderPropertyDetails(prop, container) {
         </div>
     `;
 
-    initDetailMap('property-detail-map', prop.geoJSON, null);
+    let geoJSONObject = null;
+    try {
+        if (prop.geoJSON) {
+            geoJSONObject = JSON.parse(prop.geoJSON);
+        }
+    } catch (e) {
+        console.error("Failed to parse property GeoJSON:", e);
+    }
+
+    initDetailViewMap('property-detail-map', geoJSONObject, null);
 }
 
 function renderProfileDetails(prof, container) {
@@ -355,6 +288,15 @@ function renderTimberSaleDetails(sale, container) {
             </div>
         </div>
     `;
-
-    initDetailMap('sale-detail-map', sale.geoJSON, sale.cruiseData.annotations);
+    
+    let geoJSONObject = null;
+    try {
+        if (sale.geoJSON) {
+            geoJSONObject = JSON.parse(sale.geoJSON);
+        }
+    } catch (e) {
+        console.error("Failed to parse sale GeoJSON:", e);
+    }
+    
+    initDetailViewMap('sale-detail-map', geoJSONObject, sale.cruiseData.annotations);
 }

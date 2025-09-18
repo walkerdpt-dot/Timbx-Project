@@ -19,7 +19,8 @@ import {
     handleSaveProperty, handleSubmitBidOrQuote, handleDeclineInquiry,
     handleUpdateProfile, handleLogLoadSubmit, calculateNetWeight, handleSaveRateSheet,
     getSignupOptionalData, handleSendInquiries, handleAcceptQuote, handleCancelInquiry,
-    handleTimberSaleSubmit, handleRetractCruise, handleCompleteProject, handleStartTimberSale
+    handleTimberSaleSubmit, handleRetractCruise, handleCompleteProject, handleStartTimberSale,
+    handleDeclineProject, handlePostFeedEntry, handleUpdateLoadSubmit
 } from './forms.js';
 
 // --- Constants ---
@@ -31,25 +32,19 @@ export const SERVICE_PROVIDER_SERVICES = [ "Mechanical Site Prep", "Chemical Sit
 
 // --- App Initialization & Routing ---
 document.addEventListener('DOMContentLoaded', () => {
-    document.querySelectorAll('.modal-overlay, .full-page-section').forEach(modal => {
-        modal.classList.add('hidden');
-    });
-
     try {
         const app = initializeApp(firebaseConfig);
         setApp(app); 
         const firestoreDb = getFirestore(app);
         setDb(firestoreDb);
-        // MODIFIED: Pass handleNavigation as a callback to be run after auth state is known
         const firebaseAuth = initializeAuth(app, firestoreDb, onUserStatusChange, handleNavigation);
         setAuth(firebaseAuth);
         window.auth = firebaseAuth; 
 
         attachAllEventListeners();
 
-        // The initial navigation is now triggered from auth.js, not here
         window.addEventListener('hashchange', handleNavigation);
-        
+         
     } catch (error) {
         console.error("FATAL ERROR during startup:", error);
         alert("A critical error occurred while initializing the application. Please check the console and refresh the page.");
@@ -59,8 +54,7 @@ document.addEventListener('DOMContentLoaded', () => {
 export function onUserStatusChange(user) {
     const loadingOverlay = document.getElementById('loading-overlay');
     setCurrentUser(user);
-    
-    // This function now returns a promise that resolves when data is loaded
+     
     return new Promise(async (resolve) => {
         if (user && user.uid) {
             loadingOverlay.classList.remove('hidden');
@@ -69,7 +63,7 @@ export function onUserStatusChange(user) {
                 setAllProjects(projects);
 
                 const propertyIds = [...new Set(projects.map(p => p.propertyId))];
-                
+                 
                 const propertyPromises = propertyIds.map(id =>
                     getPropertyById(db, id).catch(error => {
                         console.warn(`Could not fetch property ${id}, possibly due to permissions for a pending inquiry.`, error.message);
@@ -83,7 +77,7 @@ export function onUserStatusChange(user) {
                     fetchInquiriesForUser(db, user.uid),
                     fetchTimberSales(db)
                 ]);
-                
+                 
                 const allUserProps = new Map();
                 propertiesFromProjects.forEach(p => p && allUserProps.set(p.id, p));
 
@@ -99,7 +93,6 @@ export function onUserStatusChange(user) {
 
             } catch (error) {
                 console.error("Failed to fetch initial marketplace data:", error);
-                alert("There was an error loading essential data. Please check your connection and refresh the page.");
             } finally {
                 loadingOverlay.classList.add('hidden');
             }
@@ -111,27 +104,49 @@ export function onUserStatusChange(user) {
             setAllTimberSales([]);
         }
         ui.updateLoginUI();
-        resolve(); // Resolve the promise once all data is loaded or cleared
+        resolve(); 
     });
 }
 
 async function handleNavigation() {
     const hash = window.location.hash || '#home';
+    
+    const protectedRoutes = ['#dashboard', '#properties', '#my-projects', '#my-inquiries', '#logbook', '#my-profile', '#add-edit-property', '#add-edit-cruise'];
+    const currentRoute = hash.split('?')[0];
+
+    if (!currentUser && protectedRoutes.includes(currentRoute)) {
+        window.location.hash = '#home';
+        return;
+    }
+
+    if (currentUser && (currentRoute === '#home' || currentRoute === '')) {
+        window.location.hash = '#dashboard';
+        return; 
+    }
+
     document.querySelectorAll('.main-section').forEach(sec => sec.classList.add('hidden'));
 
-    const sectionId = hash.split('?')[0].substring(1);
+    const sectionId = currentRoute.substring(1);
     const section = document.getElementById(sectionId);
-     
+      
     if (section) {
         section.classList.remove('hidden');
         await renderMainSection(sectionId);
     } else {
-        document.getElementById('home').classList.remove('hidden');
+        const fallbackSectionId = currentUser ? 'dashboard' : 'home';
+        const fallbackSection = document.getElementById(fallbackSectionId);
+        if (fallbackSection) {
+            fallbackSection.classList.remove('hidden');
+            await renderMainSection(fallbackSectionId);
+        }
     }
 }
 
 async function renderMainSection(sectionId) {
     switch (sectionId) {
+        case 'dashboard': 
+            await ui.renderDashboard();
+            break;
         case 'marketplace':
             let map = getMapInstance('global-map');
             if (!map) {
@@ -228,9 +243,14 @@ function attachAllEventListeners() {
     document.getElementById('rate-sheet-form')?.addEventListener('submit', handleSaveRateSheet);
     document.getElementById('timber-sale-form')?.addEventListener('submit', handleTimberSaleSubmit);
     document.getElementById('send-invites-btn')?.addEventListener('click', handleSendInquiries);
+    document.getElementById('project-feed-form')?.addEventListener('submit', handlePostFeedEntry);
+    document.getElementById('edit-load-form')?.addEventListener('submit', handleUpdateLoadSubmit);
 
     document.getElementById('load-gross-weight')?.addEventListener('input', calculateNetWeight);
     document.getElementById('load-tare-weight')?.addEventListener('input', calculateNetWeight);
+    document.getElementById('edit-load-gross-weight')?.addEventListener('input', ui.calculateEditNetWeight);
+    document.getElementById('edit-load-tare-weight')?.addEventListener('input', ui.calculateEditNetWeight);
+
     document.getElementById('signup-role')?.addEventListener('change', (e) => {
         const roleSpecificContainer = document.getElementById('signup-role-specific-container');
         roleSpecificContainer.querySelectorAll('[id^="signup-"][id$="-details"]').forEach(div => div.classList.add('hidden'));
@@ -241,7 +261,7 @@ function attachAllEventListeners() {
             roleSpecificContainer.classList.add('hidden');
         }
     });
-    
+     
     document.getElementById('btn-add-property')?.addEventListener('click', () => {
         window.location.hash = '#add-edit-property';
     });
@@ -253,49 +273,52 @@ function attachAllEventListeners() {
 
         const { dataset, id, classList } = target;
 
-        if (classList.contains('submit-quote-action-btn')) ui.openForesterQuoteModal(dataset.inquiryId);
+        if (classList.contains('view-project-feed-btn')) ui.openProjectFeedModal(dataset.projectId);
+        else if (classList.contains('edit-load-btn')) ui.openEditLoadModal(dataset.ticketId);
+        else if (classList.contains('submit-quote-action-btn')) ui.openForesterQuoteModal(dataset.inquiryId);
         else if (classList.contains('decline-inquiry-btn')) ui.openDeclineModal(dataset.inquiryId);
         else if (classList.contains('view-quotes-btn')) ui.openViewQuotesModal(dataset.projectId);
-        else if (classList.contains('accept-quote-btn')) {
-            await handleAcceptQuote(dataset.quoteId, dataset.projectId);
-        }
+        else if (classList.contains('accept-quote-btn')) await handleAcceptQuote(dataset.quoteId, dataset.projectId);
         else if (classList.contains('view-inquiry-btn')) ui.openViewInquiryModal(dataset.inquiryId);
         else if (classList.contains('cancel-inquiry-btn')) handleCancelInquiry(dataset.inquiryId);
+        else if (classList.contains('decline-project-btn')) handleDeclineProject(dataset.projectId);
         else if (classList.contains('manage-rates-btn')) ui.openRateSheetModal(dataset.projectId);
-        else if (classList.contains('submit-cruise-btn')) {
-            window.location.hash = `#add-edit-cruise?projectId=${dataset.projectId}`;
-        }
-        else if (classList.contains('approve-cruise-btn')) {
-             window.location.hash = `#add-edit-cruise?projectId=${dataset.projectId}`;
-        }
+        else if (classList.contains('submit-cruise-btn')) window.location.hash = `#add-edit-cruise?projectId=${dataset.projectId}`;
+        else if (classList.contains('approve-cruise-btn')) window.location.hash = `#add-edit-cruise?projectId=${dataset.projectId}`;
         else if (classList.contains('retract-cruise-btn')) handleRetractCruise(dataset.projectId);
-        else if (classList.contains('edit-property-btn')) {
-             window.location.hash = `#add-edit-property?id=${dataset.propertyId}`;
-        }
+        else if (classList.contains('edit-property-btn')) window.location.hash = `#add-edit-property?id=${dataset.propertyId}`;
         else if (classList.contains('seek-services-btn')) ui.openServiceSelectModal(dataset.propertyId, dataset.propertyName);
         else if (classList.contains('service-category-btn')) {
             const propertyId = target.closest('.modal-content').parentElement.dataset.propertyId;
-            const serviceType = dataset.serviceCategory;
-            if (serviceType === 'Forestry') {
-                 ui.openInviteForesterModal(propertyId);
-            } else {
-                alert(`The workflow for '${serviceType}' is coming soon!`);
-            }
+            const role = dataset.serviceCategory;
+            ui.openInviteProfessionalModal(propertyId, role);
         }
         else if (id === 'btn-accept-cruise-report') handleCompleteProject(dataset.projectId);
         else if (id === 'btn-start-timber-sale') handleStartTimberSale(dataset.projectId);
         else if (classList.contains('archive-inquiry-btn')) {
-            if (confirm("Are you sure you want to archive this inquiry?")) {
+            const confirmed = await ui.showConfirmationModal(
+                "Archive Inquiry?",
+                "Are you sure you want to archive this inquiry? It will be hidden from your main list."
+            );
+            if (confirmed) {
                 await updateInquiryStatus(db, dataset.inquiryId, 'archived');
                 ui.renderInquiriesForCurrentUser();
             }
         } else if (classList.contains('delete-property-btn')) {
-            if (confirm("Are you sure? This action cannot be undone.")) {
+            const confirmed = await ui.showConfirmationModal(
+                "Delete Property?",
+                "Are you sure? This action cannot be undone and will permanently delete the property."
+            );
+            if (confirmed) {
                 await deleteProperty(db, dataset.propertyId);
                 await onUserStatusChange(currentUser);
             }
         } else if (classList.contains('delete-load-btn')) {
-            if (confirm("Are you sure you want to permanently delete this haul ticket?")) {
+            const confirmed = await ui.showConfirmationModal(
+                "Delete Ticket?",
+                "Are you sure you want to permanently delete this haul ticket?"
+            );
+            if (confirmed) {
                 await deleteHaulTicket(db, dataset.ticketId);
                 ui.renderMyLoads();
             }
@@ -327,6 +350,7 @@ async function loginAsDemoUser(role) {
 
     try {
         await signInWithEmailAndPassword(auth, credentials.email, credentials.password);
+        ui.closeModal('login-modal');
     } catch (error) {
         console.error(`Demo login for ${role} failed:`, error);
         alert(`Could not log in as demo ${role}. Please ensure the account exists.`);

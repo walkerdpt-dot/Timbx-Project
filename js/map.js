@@ -1,24 +1,50 @@
 // js/map.js
 export const mapInstances = new Map();
 let lastDrawnLayer;
-export let saleMapFeatures = []; 
-export let myPropertiesLayerGroup = null; 
-let locationMarker = null; 
-let serviceAreaCircle = null; 
+export let saleMapFeatures = [];
+export let myPropertiesLayerGroup = null;
+let locationMarker = null;
+let serviceAreaCircle = null;
 
-// MODIFIED: Replaced green colors with non-green alternatives for better contrast
-const DRAW_COLOR_PALETTE = [
-    '#E6194B', // Red
-    '#4363d8', // Blue
-    '#f58231', // Orange
-    '#911eb4', // Purple
-    '#42d4f4', // Cyan
-    '#f032e6', // Magenta
-    '#9A6324', // Brown
-    '#800000', // Maroon
-    '#808000', // Olive
-    '#000075'  // Navy
+// Brighter, but still "Earthy" Color Palette (Green removed)
+const DRAW_FILL_PALETTE = [
+    '#D9A23D', // Amber/Ochre
+    '#9D8DF1', // Light Purple
+    '#CD5C5C', // Indian Red / Terracotta
+    '#6A8D92', // Slate Blue/Gray
+    '#B58463'  // Sienna Brown
 ];
+const DRAW_BORDER_PALETTE = [
+    '#B3862D', // Darker Amber
+    '#6D5BA7', // Darker Purple
+    '#A54B4B', // Darker Red
+    '#496266', // Darker Slate
+    '#8B4513'  // Saddle Brown
+];
+
+
+/**
+ * Creates the standard hybrid map view (Satellite + Labels + Roads).
+ * This is a reusable function to ensure map consistency.
+ * @returns {L.LayerGroup} A Leaflet LayerGroup containing the hybrid map layers.
+ */
+export function createHybridLayer() {
+    // CORRECTED: This combines THREE layers for the perfect hybrid view.
+    // 1. The base satellite imagery.
+    // 2. A transparent layer for roads and highways.
+    // 3. A transparent layer for city labels and major boundaries.
+    return L.layerGroup([
+        L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+             attribution: 'Tiles &copy; Esri'
+        }),
+        L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}', {
+            pane: 'shadowPane' // Use a custom pane to ensure it's on top of imagery
+        }),
+        L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', {
+            pane: 'shadowPane' // Use the same custom pane
+        })
+    ]);
+}
 
 
 function createBaseMap(containerId, mapOptions = {}, view = [34.7465, -92.2896, 7]) {
@@ -26,7 +52,7 @@ function createBaseMap(containerId, mapOptions = {}, view = [34.7465, -92.2896, 
         const oldMap = mapInstances.get(containerId);
         if (oldMap) oldMap.remove();
     }
-     
+      
     const mapContainer = document.getElementById(containerId);
     if (!mapContainer) {
         console.error(`Map container with ID "${containerId}" not found.`);
@@ -36,12 +62,13 @@ function createBaseMap(containerId, mapOptions = {}, view = [34.7465, -92.2896, 
 
     const map = L.map(containerId, mapOptions).setView(view.slice(0, 2), view[2]);
 
-    map.createPane('boundaries');
-    map.getPane('boundaries').style.zIndex = 650; 
-    map.getPane('boundaries').style.pointerEvents = 'none';
+    // This pane is used by the hybrid layer to ensure labels are on top.
+    map.createPane('shadowPane');
+    map.getPane('shadowPane').style.zIndex = 650;
+    map.getPane('shadowPane').style.pointerEvents = 'none';
 
     addLayerControls(map);
-     
+      
     mapInstances.set(containerId, map);
     return map;
 }
@@ -51,26 +78,15 @@ export function addLayerControls(map) {
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
     });
 
-    const topo = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}', {
-        attribution: 'Tiles &copy; Esri &mdash; Esri, DeLorme, NAVTEQ, TomTom, Intermap, iPC, USGS, FAO, NPS, NRCAN, GeoBase, Kadaster NL, Ordnance Survey, Esri Japan, METI, Esri China (Hong Kong), and the GIS User Community'
+    const topo = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
+        attribution: 'Map data: &copy; OpenStreetMap contributors, SRTM | Map style: &copy; OpenTopoMap (CC-BY-SA)'
     });
 
     const satellite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
         attribution: 'Tiles &copy; Esri'
     });
- 
-    const hybrid = L.layerGroup([
-        L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-             attribution: 'Tiles &copy; Esri'
-        }),
-        L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', {
-            attribution: 'Labels & Boundaries &copy; Esri'
-        }),
-        L.tileLayer('https://tiles.stadiamaps.com/tiles/stamen_toner_lines/{z}/{x}/{y}{r}.png', {
-            attribution: 'Map tiles by <a href="http://stamen.com">Stamen Design</a>',
-            pane: 'boundaries'
-        })
-    ]);
+  
+    const hybrid = createHybridLayer();
 
     const baseMaps = {
         "Hybrid": hybrid,
@@ -85,12 +101,12 @@ export function addLayerControls(map) {
 
 export function getDrawnHarvestAreas() {
     return saleMapFeatures
-        .map(item => ({ 
-            label: item.label, 
+        .map(item => ({
+            label: item.label,
             acreage: item.acreage,
             color: item.layer.options.color,
-            fillColor: item.layer.options.fillColor, // Pass fill color for legend
-            type: item.type 
+            fillColor: item.layer.options.fillColor,
+            type: item.type
         }));
 }
 
@@ -124,7 +140,7 @@ export function initMyPropertiesMap() {
 export function initPropertyFormMap(existingGeoJSON) {
     const map = createBaseMap('property-map', {}, [34.7465, -92.2896, 10]);
     if (!map) return;
-     
+      
     const drawnItems = new L.FeatureGroup().addTo(map);
 
     if (existingGeoJSON?.geometry?.coordinates) {
@@ -175,17 +191,19 @@ export function getLastDrawnGeoJSON() {
 
 export function getProjectAnnotationsAsGeoJSON() {
     if (saleMapFeatures.length === 0) return null;
-     
-    const features = saleMapFeatures.map(item => {
-        const feature = item.layer.toGeoJSON();
-        feature.properties = {
-            label: item.label,
-            type: item.type,
-            color: item.layer.options.color,
-            acreage: item.acreage || 0
-        };
-        return feature;
-    });
+      
+    const features = saleMapFeatures
+        .filter(item => item.type !== 'Property Boundary')
+        .map(item => {
+            const feature = item.layer.toGeoJSON();
+            feature.properties = {
+                label: item.label,
+                type: item.type,
+                color: item.layer.options.color,
+                acreage: item.acreage || 0
+            };
+            return feature;
+        });
 
     return {
         type: "FeatureCollection",
@@ -197,7 +215,7 @@ export function initTimberSaleMap(propertyGeoJSON, existingAnnotations, isReadOn
     const map = createBaseMap('timber-sale-map');
     if (!map) return null;
 
-    saleMapFeatures = []; 
+    saleMapFeatures = [];
     const drawnItems = new L.FeatureGroup().addTo(map);
 
     if (propertyGeoJSON?.geometry?.coordinates) {
@@ -205,13 +223,14 @@ export function initTimberSaleMap(propertyGeoJSON, existingAnnotations, isReadOn
         const propertyLayer = L.geoJSON(propertyGeoJSON, {
             style: propertyStyle
         }).addTo(map);
-         
+          
         if (propertyLayer.getBounds().isValid()) {
             map.fitBounds(propertyLayer.getBounds(), { padding: [50, 50] });
             const areaInMeters = L.GeometryUtil.geodesicArea(propertyLayer.getLayers()[0].getLatLngs()[0]);
             const acreage = areaInMeters / 4046.86;
-            propertyLayer.options.color = propertyStyle.color;
-            propertyLayer.options.fillColor = propertyStyle.color;
+            
+            propertyLayer.options.originalStyle = propertyStyle;
+
             saleMapFeatures.push({ layer: propertyLayer, type: 'Property Boundary', label: 'Property Boundary', acreage: acreage });
         }
     }
@@ -229,29 +248,37 @@ export function initTimberSaleMap(propertyGeoJSON, existingAnnotations, isReadOn
 
         if (parsedAnnotations) {
             L.geoJSON(parsedAnnotations, {
+                pointToLayer: (feature, latlng) => {
+                    const colorIndex = saleMapFeatures.length % DRAW_FILL_PALETTE.length;
+                    const marker = L.circleMarker(latlng, {
+                        radius: 8,
+                        color: 'white',
+                        weight: 2,
+                        fillColor: DRAW_BORDER_PALETTE[colorIndex],
+                        fillOpacity: 0.9
+                    });
+                    marker.options.color = DRAW_BORDER_PALETTE[colorIndex];
+                    return marker;
+                },
                 onEachFeature: (feature, layer) => {
-                    const { label, type, color, acreage } = feature.properties;
-                    const styleColor = color || DRAW_COLOR_PALETTE[saleMapFeatures.length % DRAW_COLOR_PALETTE.length];
-                    
-                    if (layer instanceof L.Marker) {
-                        // MODIFIED: Use new circle-marker-icon class
-                        layer.setIcon(L.divIcon({
-                            className: 'circle-marker-icon',
-                            html: '', // HTML is now empty, style via CSS
-                            iconSize: [24, 24], // Adjust size for a circle
-                            iconAnchor: [12, 12], // Center the icon
-                            className: 'circle-marker-icon'
-                        }));
-                        // Set background color directly on the icon element for Leaflet markers
-                        layer._icon.style.backgroundColor = styleColor;
-                        layer.options.color = styleColor; // Store for legend/editing
-                    } else if (typeof layer.setStyle === 'function') {
-                        layer.setStyle({ color: styleColor, fillColor: styleColor, fillOpacity: 0.5 });
+                    const { label, type, acreage } = feature.properties;
+                    const colorIndex = saleMapFeatures.length % DRAW_FILL_PALETTE.length;
+                    const style = {
+                        color: DRAW_BORDER_PALETTE[colorIndex],
+                        weight: 3,
+                        fillColor: DRAW_FILL_PALETTE[colorIndex],
+                        fillOpacity: 0.5
+                    };
+                     
+                    if (typeof layer.setStyle === 'function') {
+                        layer.setStyle(style);
                     }
+                    layer.options.color = style.color; 
+
                     if (label) {
                        layer.bindTooltip(label);
                     }
-                    saleMapFeatures.push({ layer, type, label, acreage, color: styleColor, fillColor: styleColor });
+                    saleMapFeatures.push({ layer, type, label, acreage });
                     drawnItems.addLayer(layer);
                 }
             }).addTo(map);
@@ -259,50 +286,59 @@ export function initTimberSaleMap(propertyGeoJSON, existingAnnotations, isReadOn
     }
 
     if (!isReadOnly) {
+        const colorIndex = () => saleMapFeatures.length % DRAW_FILL_PALETTE.length;
         const drawControl = new L.Control.Draw({
             edit: { featureGroup: drawnItems },
             draw: {
-                polygon: { shapeOptions: { color: DRAW_COLOR_PALETTE[0], fillColor: DRAW_COLOR_PALETTE[0], fillOpacity: 0.5 } },
-                rectangle: { shapeOptions: { color: DRAW_COLOR_PALETTE[1], fillColor: DRAW_COLOR_PALETTE[1], fillOpacity: 0.5 } },
-                polyline: { shapeOptions: { color: DRAW_COLOR_PALETTE[2] } },
-                marker: {
-                    // MODIFIED: Use new circle-marker-icon class for drawing
-                    icon: L.divIcon({
-                        className: 'circle-marker-icon',
-                        html: '',
-                        iconSize: [24, 24],
-                        iconAnchor: [12, 12]
-                    })
+                polygon: { shapeOptions: { color: DRAW_BORDER_PALETTE[0], weight: 3, fillColor: DRAW_FILL_PALETTE[0], fillOpacity: 0.5 } },
+                rectangle: { shapeOptions: { color: DRAW_BORDER_PALETTE[0], weight: 3, fillColor: DRAW_FILL_PALETTE[0], fillOpacity: 0.5 } },
+                polyline: { shapeOptions: { color: DRAW_BORDER_PALETTE[0], weight: 4 } },
+                marker: false,
+                circlemarker: { 
+                    radius: 8,
+                    color: 'white',
+                    weight: 2,
+                    fillColor: DRAW_BORDER_PALETTE[0],
+                    fillOpacity: 0.9
                 },
                 circle: false,
-                circlemarker: false
             }
         }).addTo(map);
 
         map.on(L.Draw.Event.CREATED, (event) => {
             const layer = event.layer;
             const type = event.layerType;
-             
-            const color = DRAW_COLOR_PALETTE[saleMapFeatures.length % DRAW_COLOR_PALETTE.length];
-             
-            if (type === 'marker') {
-                layer.options.color = color;
-                // MODIFIED: Set background color directly for the drawn marker
-                if (layer._icon) {
-                    layer._icon.style.backgroundColor = color;
-                }
-            } else if (typeof layer.setStyle === 'function') {
-                layer.setStyle({ color: color, fillColor: color, fillOpacity: 0.5 });
+            const idx = colorIndex();
+              
+            let style = {};
+            if (type === 'circlemarker') {
+                style = {
+                    fillColor: DRAW_BORDER_PALETTE[idx],
+                    fillOpacity: 0.9
+                };
+            } else if (type === 'polyline') {
+                style = {
+                    color: DRAW_BORDER_PALETTE[idx],
+                    weight: 4
+                };
+            } else {
+                style = {
+                    color: DRAW_BORDER_PALETTE[idx],
+                    weight: 3,
+                    fillColor: DRAW_FILL_PALETTE[idx],
+                    fillOpacity: 0.5
+                };
             }
+            layer.setStyle(style);
 
             let featureType = 'Feature';
             if (type === 'polygon') featureType = 'Harvest Area';
             if (type === 'rectangle') featureType = 'SMZ';
             if (type === 'polyline') featureType = 'Road';
-            if (type === 'marker') featureType = 'Point of Interest';
+            if (type === 'circlemarker') featureType = 'Point of Interest';
 
             const label = prompt(`Enter a label for this new ${featureType}:`);
-             
+              
             if (label) {
                 layer.bindTooltip(label);
                 drawnItems.addLayer(layer);
@@ -311,7 +347,7 @@ export function initTimberSaleMap(propertyGeoJSON, existingAnnotations, isReadOn
                     const areaInMeters = L.GeometryUtil.geodesicArea(layer.getLatLngs()[0]);
                     acreage = areaInMeters / 4046.86;
                 }
-                saleMapFeatures.push({ layer, type: featureType, label, acreage, color: color, fillColor: color });
+                saleMapFeatures.push({ layer, type: featureType, label, acreage });
                 document.dispatchEvent(new CustomEvent('harvestAreasUpdated'));
             }
         });
@@ -323,7 +359,7 @@ export function initTimberSaleMap(propertyGeoJSON, existingAnnotations, isReadOn
             document.dispatchEvent(new CustomEvent('harvestAreasUpdated'));
         });
     }
-    
+     
     setTimeout(() => {
         document.dispatchEvent(new CustomEvent('harvestAreasUpdated'));
     }, 200);
@@ -331,14 +367,46 @@ export function initTimberSaleMap(propertyGeoJSON, existingAnnotations, isReadOn
     return map;
 }
 
-export function initDetailViewMap(containerId, geoJSON) {
+// MODIFIED: This function is now more robust and will not crash on invalid GeoJSON.
+export function initDetailViewMap(containerId, geoJSON, annotations) {
     const map = createBaseMap(containerId);
     if (!map) return;
+    
     let bounds;
-    if (geoJSON) {
-        const layer = L.geoJSON(geoJSON).addTo(map);
-        bounds = layer.getBounds();
+    
+    // This try-catch block prevents the page from crashing if the GeoJSON is invalid
+    try {
+        if (geoJSON && geoJSON.geometry && geoJSON.geometry.coordinates) {
+            const layer = L.geoJSON(geoJSON).addTo(map);
+            bounds = layer.getBounds();
+        }
+    } catch (error) {
+        console.error("Failed to render GeoJSON on detail map:", error);
     }
+    
+    try {
+        if (annotations) {
+            const annotationLayer = L.geoJSON(annotations, {
+                onEachFeature: (feature, layer) => {
+                    if (feature.properties?.label) {
+                        layer.bindTooltip(feature.properties.label, { permanent: true, direction: 'center', className: 'map-label' });
+                    }
+                    if (feature.properties?.color && typeof layer.setStyle === 'function') {
+                        layer.setStyle({ color: feature.properties.color });
+                    }
+                }
+            }).addTo(map);
+
+            if (!bounds || !bounds.isValid()) {
+                bounds = annotationLayer.getBounds();
+            } else {
+                bounds.extend(annotationLayer.getBounds());
+            }
+        }
+    } catch (e) {
+        console.error("Could not add annotations to detail map, invalid GeoJSON:", e);
+    }
+
     if (bounds && bounds.isValid()) {
          map.fitBounds(bounds, { padding: [50, 50] });
     }
@@ -378,14 +446,14 @@ export function initEditProfileMap(userProfile) {
     const lat = userProfile?.location?.lat || 34.7465;
     const lng = userProfile?.location?.lng || -92.2896;
     const radius = userProfile?.serviceRadius || 50;
-     
+      
     const map = createBaseMap('edit-profile-map', {}, [lat, lng, 7]);
     if (!map) return;
-     
+      
     locationMarker = L.marker([lat, lng], { draggable: true }).addTo(map);
     serviceAreaCircle = L.circle([lat, lng], { radius: radius * 1609.34, color: 'blue', fillColor: '#3498db', fillOpacity: 0.2 }).addTo(map);
-     
-    locationMarker.on('dragend', (event) => serviceAreaCircle.setLatLng(event.target.getLatLng());
+      
+    locationMarker.on('dragend', (event) => serviceAreaCircle.setLatLng(event.target.getLatLng()));
     setTimeout(() => map.invalidateSize(), 400);
 }
 

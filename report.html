@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Timber Sale Report</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" />
+    <link rel="stylesheet" href="css/style.css" />
+    <style>
+        /* Base styles for a document-like layout */
+        body {
+            background-color: #D1D5DB; /* A neutral gray background for the screen */
+        }
+        main.print-layout {
+            width: 8.5in;
+            min-height: 11in;
+            padding: 0.75in;
+            margin: 1rem auto;
+            box-sizing: border-box;
+            background-color: white;
+            box-shadow: 0 0 10px rgba(0,0,0,0.5);
+            position: relative; /* FIX: Establishes a stacking context */
+            z-index: 1;      /* FIX: Ensures it sits below the sticky header (z-index: 50) */
+        }
+        .spec-paragraph { margin-bottom: 1rem; }
+
+        .map-container {
+            width: 100% !important;
+            height: 5in !important;
+            border: 1px solid #999;
+            page-break-inside: avoid;
+        }
+
+        /* Styles FOR PRINTING */
+        @media print {
+            body, main.print-layout {
+                margin: 0;
+                padding: 0;
+                box-shadow: none;
+                border: none;
+                background-color: white !important;
+            }
+            .no-print { display: none !important; }
+            .page-break { page-break-before: always; }
+            h2.section-header {
+                background-color: #F7FAFC !important;
+                -webkit-print-color-adjust: exact; 
+                print-color-adjust: exact;
+            }
+            th {
+                background-color: #F7FAFC !important;
+                -webkit-print-color-adjust: exact; 
+                print-color-adjust: exact;
+            }
+        }
+    </style>
+</head>
+<body class="bg-gray-400">
+
+    <header class="bg-white p-4 shadow-md no-print sticky top-0 z-50">
+        <div class="container mx-auto flex justify-between items-center">
+            <h1 class="text-2xl font-bold text-green-800">Timber Sale Prospectus</h1>
+            <div>
+                <a href="#" id="back-button" class="text-blue-600 hover:underline">&larr; Back to Project</a>
+                <button onclick="window.print()" class="ml-4 bg-green-700 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg">
+                    Print / Save as PDF
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="print-layout">
+        <div class="mb-8 pb-6 border-b border-gray-300">
+            <div class="text-center">
+                <p class="text-md text-gray-600">Notice of Timber Sale</p>
+                <h2 id="report-sale-name" class="text-4xl font-bold text-gray-800 border-none p-0 mt-1 mb-0"></h2>
+                <p id="report-owner-info" class="text-xl text-gray-700 mt-1"></p>
+            </div>
+        </div>
+
+        <section class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div>
+                <h2 class="text-lg font-bold bg-gray-100 border p-2 section-header">General Information</h2>
+                <div class="section-content grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-2 text-sm mt-2">
+                    <div><strong>Location:</strong> <span id="report-location"></span></div>
+                    <div><strong>Harvest Acres:</strong> <span id="report-acreage"></span></div>
+                    <div><strong>Legal Description:</strong> <span id="report-legal-desc"></span></div>
+                    <div><strong>Bid Method:</strong> <span id="report-bid-method"></span></div>
+                    <div class="md:col-span-2"><strong>Access:</strong> <span id="report-access-desc"></span></div>
+                    <div><strong>Bid Deadline:</strong> <span id="report-bid-deadline"></span></div>
+                </div>
+            </div>
+             <div>
+                <h2 id="report-page1-summary-title" class="text-lg font-bold bg-gray-100 border p-2 section-header">Volume Summary</h2>
+                <div id="report-page1-summary-container" class="section-content mt-2"></div>
+            </div>
+        </section>
+
+        <section class="page-break">
+            <h2 class="text-lg font-bold bg-gray-100 border p-2 mt-6 section-header">Location Map</h2>
+            <div id="map-header-location" class="text-center font-semibold mt-3 text-sm"></div>
+            <div id="report-map-location" class="map-container w-full border rounded-md"></div>
+        </section>
+
+        <section class="page-break">
+            <h2 class="text-lg font-bold bg-gray-100 border p-2 mt-6 section-header">Topographic Map</h2>
+            <div id="map-header-topo" class="text-center font-semibold mt-3 text-sm"></div>
+            <div id="report-map-topo" class="map-container w-full border rounded-md"></div>
+            <div id="report-map-legend-topo" class="mt-2 p-2 text-sm"></div>
+        </section>
+
+        <section class="page-break">
+            <h2 class="text-lg font-bold bg-gray-100 border p-2 mt-6 section-header">Aerial Map</h2>
+            <div id="map-header-aerial" class="text-center font-semibold mt-3 text-sm"></div>
+            <div id="report-map-aerial" class="map-container w-full border rounded-md"></div>
+            <div id="report-map-legend" class="mt-2 p-2 text-sm"></div>
+        </section>
+        
+        <section class="page-break">
+            <h2 class="text-lg font-bold bg-gray-100 border p-2 mt-6 section-header">Timber Description & Estimated Volumes</h2>
+            <div id="report-summary-container" class="section-content space-y-6 mt-2"></div>
+        </section>
+
+        <section class="page-break">
+             <h2 class="text-lg font-bold bg-gray-100 border p-2 mt-6 section-header">Detailed Stand & Product Volumes</h2>
+             <div id="report-inventory-container" class="section-content space-y-6 mt-2"></div>
+        </section>
+        
+        <section class="page-break">
+            <h2 class="text-lg font-bold bg-gray-100 border p-2 mt-6 section-header">Harvest Specifications & Contract Terms</h2>
+            <div id="report-specifications-container" class="section-content space-y-4 text-sm mt-2"></div>
+        </section>
+        
+        <section>
+             <h2 class="text-lg font-bold bg-gray-100 border p-2 mt-6 section-header">Contact Information</h2>
+             <div id="report-contact-info" class="section-content mt-2"></div>
+        </section>
+
+        <footer class="mt-12 pt-6 border-t text-center text-xs text-gray-500">
+            <p>This prospectus was generated by TIMBX on <span id="report-generation-date"></span>.</p>
+            <p>All volumes are estimates and are not guaranteed. Bidders are encouraged to conduct their own cruise and verify all information herein.</p>
+        </footer>
+    </main>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+    <script type="module" src="js/report.js"></script>
+</body>
+</html>

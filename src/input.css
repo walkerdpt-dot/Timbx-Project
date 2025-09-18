@@ -1,0 +1,316 @@
+/* =================================================================== */ 
+/* General Body & Typography Styles                                    */ 
+/* =================================================================== */ 
+
+body { 
+    background-color: #f0fdf4; /* A very light green for the background */ 
+    color: #1f2937; /* Dark gray for text */ 
+} 
+
+/* =================================================================== */ 
+/* Navigation Bar Layout                                               */ 
+/* =================================================================== */ 
+
+.nav-container { 
+    position: relative; 
+    display: flex; 
+    align-items: center; 
+    justify-content: center; 
+    height: 40px;  
+} 
+
+.nav-links { 
+    display: flex; 
+    align-items: center; 
+    gap: 1rem; 
+    white-space: nowrap; 
+} 
+
+.nav-auth { 
+    position: absolute; 
+    right: 0; 
+    top: 50%; 
+    transform: translateY(-50%); 
+    display: flex; 
+    align-items: center; 
+} 
+
+#user-display.hidden { 
+    display: none; 
+} 
+
+
+/* =================================================================== */ 
+/* Map Container Styles                                                */ 
+/* =================================================================== */ 
+
+#global-map, #forester-signup-map, #buyer-signup-map, #contractor-signup-map, #edit-profile-map, #profile-map-display, #my-properties-map { 
+    height: 600px; 
+} 
+
+#property-map { 
+    height: 400px; 
+} 
+
+#timber-sale-map { 
+    height: 500px; 
+} 
+
+#global-map, #property-map, #forester-signup-map, #buyer-signup-map, #contractor-signup-map, #edit-profile-map, #profile-map-display, #my-properties-map, #timber-sale-map { 
+    border-radius: 0.5rem; 
+    border: 1px solid #d1d5db; 
+} 
+
+.leaflet-container { 
+    width: 100%; 
+    height: 100%; 
+} 
+
+
+/* =================================================================== */ 
+/* Modal & Overlay Styles (CORRECTED SELECTORS)                        */ 
+/* =================================================================== */ 
+
+#login-modal:not(.hidden),
+#service-select-modal:not(.hidden),
+#invite-forester-modal:not(.hidden),
+#view-inquiry-modal:not(.hidden),
+#submit-quote-modal:not(.hidden),
+#view-quotes-modal:not(.hidden),
+#info-modal:not(.hidden),
+#confirmation-modal:not(.hidden),
+#project-feed-modal:not(.hidden),
+#edit-load-modal:not(.hidden),
+.full-page-section:not(.hidden) { 
+    position: fixed; 
+    top: 0; 
+    left: 0; 
+    width: 100%; 
+    height: 100%; 
+    background-color: rgba(0, 0, 0, 0.6); 
+    display: flex; 
+    justify-content: center; 
+    align-items: center; 
+    z-index: 1000; 
+} 
+
+.full-page-section:not(.hidden) { 
+    overflow-y: auto; 
+    padding: 2rem 0; 
+    align-items: flex-start; 
+} 
+
+.modal-content { 
+    background: white; 
+    padding: 2rem; 
+    border-radius: 0.5rem; 
+    width: 90%; 
+    max-width: 500px; 
+    max-height: 90vh; 
+    overflow-y: auto; 
+    position: relative; 
+    box-shadow: 0 10px 25px rgba(0,0,0,0.1); 
+} 
+
+.full-page-section .modal-content { 
+    max-width: 900px; 
+    margin-top: 2rem; 
+    margin-bottom: 2rem; 
+} 
+
+#property-form-modal .modal-content, #timber-sale-form-modal .modal-content { 
+    max-width: 900px !important; 
+    width: 95%; 
+} 
+
+
+.close-button { 
+    position: absolute; 
+    top: 10px; 
+    right: 20px; 
+    font-size: 2rem; 
+    color: #6b7280; 
+    cursor: pointer; 
+    line-height: 1; 
+} 
+
+.close-button:hover { 
+    color: #1f2937; 
+} 
+
+/* =================================================================== */ 
+/* Map-Specific UI Elements (Legend, Search, Geocoder)                 */ 
+/* =================================================================== */ 
+
+.legend-dot { 
+    height: 12px; 
+    width: 12px; 
+    border-radius: 50%; 
+    display: inline-block; 
+    margin-right: 5px; 
+    border: 1px solid rgba(0,0,0,0.2); 
+} 
+
+.map-label { 
+    background-color: rgba(255, 255, 255, 0.8); 
+    border: 1px solid #333; 
+    border-radius: 4px; 
+    padding: 2px 5px; 
+    font-weight: bold; 
+    font-size: 12px; 
+    white-space: nowrap; 
+} 
+
+/* =================================================================== */ 
+/* Leaflet.Draw Plugin Overrides                                       */ 
+/* =================================================================== */ 
+
+.leaflet-editing-icon { 
+  background-color: #ff4136 !important; 
+  width: 8px !important; 
+  height: 8px !important; 
+  margin-left: -4px !important; 
+  margin-top: -4px !important; 
+  border-radius: 1px; 
+} 
+
+.leaflet-vertex-icon.leaflet-vertex-icon-middle { 
+    background-color: #ff4136 !important; 
+    opacity: 0.7; 
+} 
+
+.filter-group { 
+  display: flex; 
+  flex-direction: column; 
+  align-items: flex-start; 
+  gap: 0.5rem; 
+} 
+
+.filter-group-label { 
+  display: flex; 
+  align-items: center; 
+  font-weight: 500; 
+  color: #374151; 
+} 
+
+.filter-group-select { 
+  width: 100%; 
+  font-size: 0.875rem; 
+  border-radius: 0.375rem; 
+  border-color: #D1D5DB; 
+  padding-top: 0.25rem; 
+  padding-bottom: 0.25rem; 
+} 
+
+.more-options-container { 
+    position: relative; 
+} 
+
+.more-options-dropdown { 
+    position: absolute; 
+    right: 0; 
+    top: 100%; 
+    margin-top: 0.5rem; 
+    z-index: 10; 
+} 
+
+/* =================================================================== */ 
+/* Loading Overlay Styles                                              */ 
+/* =================================================================== */ 
+
+#loading-overlay { 
+    position: fixed; 
+    top: 0; 
+    left: 0; 
+    width: 100%; 
+    height: 100%; 
+    background-color: rgba(255, 255, 255, 0.8); 
+    display: flex; 
+    justify-content: center; 
+    align-items: center; 
+    z-index: 9999; 
+    backdrop-filter: blur(4px); 
+    transition: opacity 0.3s; 
+} 
+
+#loading-overlay.hidden { 
+    opacity: 0; 
+    pointer-events: none; 
+} 
+
+@keyframes spin { 
+    to { transform: rotate(360deg); } 
+} 
+
+.spinner { 
+    border: 5px solid rgba(0, 0, 0, 0.1); 
+    width: 50px; 
+    height: 50px; 
+    border-radius: 50%; 
+    border-left-color: #059669; 
+    animation: spin 1s ease-in-out infinite; 
+} 
+
+
+/* =================================================================== */ 
+/* Map Marker Styles                                                   */ 
+/* =================================================================== */ 
+.circle-marker-icon { 
+    border-radius: 50%; 
+    border: 2px solid white; 
+    box-shadow: 0 1px 3px rgba(0,0,0,0.5); 
+} 
+
+/* =================================================================== */ 
+/* Report-Specific Styles                                              */ 
+/* =================================================================== */ 
+.report-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 1.5rem;
+}
+ 
+.report-table th, .report-table td {
+    border: 1px solid #CBD5E0; /* A light gray border */
+    padding: 0.5rem;
+    text-align: left;
+    font-size: 0.875rem;
+}
+ 
+.report-table th {
+    background-color: #F1F5F9; /* A very light gray for headers */
+    font-weight: 600;
+}
+ 
+.report-table tbody tr:nth-child(even) {
+    background-color: #F8FAFC;
+}
+ 
+.report-table tfoot td {
+    font-weight: bold;
+    background-color: #F1F5F9;
+}
+ 
+/* Styles for printing the report */
+@media print {
+    body {
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+    .no-print {
+        display: none !important;
+    }
+    .page-break {
+        page-break-before: always;
+    }
+    main.container {
+        box-shadow: none !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+}
+
+/* TAILWIND DIRECTIVES */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
